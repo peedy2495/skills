@@ -9,6 +9,8 @@ Supervisor plans/checks; executor implements/repairs. One handoff, one autonomou
 
 ## Progressive Disclosure
 
+For initial project integration or missing/broken links or profiles, follow [README.md](../../README.md), section “Connect a project”. Skip this setup guide during normal work in an already configured project.
+
 Read [supervision.md](references/supervision.md) for delegation. Runner injects the execution contract, seven rules and report schema. Do not inject this supervisor skill/supervision reference again. Select only needed references in the plan: [testing.md](references/testing.md) for substantive implementation; [ui.md](references/ui.md) only for actual interfaces; [architecture.md](references/architecture.md) only for boundary/technology decisions. Never load whole catalogs, unrelated languages or adjacent skills as background.
 
 ## Design by Contract
