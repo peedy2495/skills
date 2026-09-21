@@ -4,19 +4,19 @@ SUCCESS
 
 # Implemented
 
-- Library AGENTS.md and executor SKILL.md link to README “Connect a project” for initial setup or broken integration only.
-- Setup guidance remains single-source and is not loaded during normal configured work.
+- Skill-maintenance scope now explicitly includes project-local skills.
+- Established semantic anchors are preferred where they meaningfully shorten instructions without ambiguity or behavior loss; concrete project requirements and safeguards remain explicit.
 
 # Changed Files
 
-- AGENTS.md, skills/opencode-executor/SKILL.md, .agents/PLAN.md, .agents/IMPLEMENTATION_REPORT.md
+- skills/skill-maintenance/SKILL.md, .agents/PLAN.md, .agents/IMPLEMENTATION_REPORT.md
 
 # Verification
 
-- bash scripts/check.sh — passed (isolated fake CLI and all Markdown references).
-- Both README paths and target section — verified.
-- git diff --check — passed.
-- Focused review — passed; documentation only, no model calls or product changes.
+- bash scripts/check.sh — passed.
+- Skill quick_validate.py — passed.
+- git diff --check and focused review — passed.
+- Documentation only; no model call, commit or push.
 
 # Plan Deviations
 

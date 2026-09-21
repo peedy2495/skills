@@ -1,15 +1,15 @@
 # Goal
 
-Completed: make project-integration instructions discoverable from the library AGENTS.md and executor skill, without duplicating setup guidance.
+Completed: explicitly apply semantic-anchor guidance to both shared and project-local skills without weakening concrete constraints.
 
 # Implementation
 
-- [x] Add conditional links to the README “Connect a project” section in both entrypoints.
+- [x] Broaden skill-maintenance discovery scope and clarify conditional anchor use with explicit project rules and safeguards.
 
 # Verification
 
-- [x] Shared library checks, relative-link resolution and git diff --check.
+- [x] Library checks, skill validation and focused diff review.
 
 # Progress
 
-Completed: library checks, link/section resolution and whitespace checks passed. Documentation only; no product changes, model calls, commit or push.
+Completed: library checks, skill validation, whitespace check and focused review passed. No model call, commit or push.
