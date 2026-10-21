@@ -1,9 +1,9 @@
 # Verbindliche Implementierungsregeln
 
-- Lies zuerst die im Plan genannten Dateien.
-- Ändere keine Architektur außerhalb des Plans.
-- Vermeide unnötige Refactorings.
-- Nutze bestehende Patterns und Libraries des Repositories.
+- Zuerst im Plan genannte Dateien lesen.
+- Keine Architekturänderung außerhalb des Plans.
+- Keine unnötigen Refactorings.
+- Bestehende Repository-Patterns und -Libraries nutzen.
 - Nach jedem logischen Abschnitt relevante Tests ausführen.
-- Relevante Compiler-, Typprüfungs- und Lint-Fehler der verwendeten Sprachen beheben.
-- Wenn eine Annahme des Plans nachweislich falsch ist, stoppe und erkläre konkret, welche Annahme falsch ist, statt eine neue Architektur zu erfinden.
+- Relevante Compiler-, Typprüfungs- und Lint-Fehler verwendeter Sprachen beheben.
+- Bei nachweislich falscher Planannahme stoppen und diese konkret erklären; keine neue Architektur erfinden.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One shared runner; profile/CLI selects the authorized model, never a fallback.
+# One shared runner. Optional deterministic routing; legacy selection stays intact.
 model=''
 project=''
 readonly plan='.agents/PLAN.md'
@@ -9,6 +9,7 @@ readonly report='.agents/IMPLEMENTATION_REPORT.md'
 effort=''
 check_only=false
 allow_xhigh=false
+explicit_selection=false
 
 fail() { printf 'Executor: %s\n' "$2" >&2; exit "$1"; }
 usage() {
@@ -21,8 +22,8 @@ while (($#)); do
   case "$1" in
     --check) check_only=true; shift ;;
     --project) (($# >= 2)) || fail 64 '--project requires a path'; project="$2"; shift 2 ;;
-    --model) (($# >= 2)) || fail 64 '--model requires provider/model'; model="$2"; shift 2 ;;
-    --effort) (($# >= 2)) || fail 64 '--effort requires a value'; effort="$2"; shift 2 ;;
+    --model) (($# >= 2)) || fail 64 '--model requires provider/model'; model="$2"; explicit_selection=true; shift 2 ;;
+    --effort) (($# >= 2)) || fail 64 '--effort requires a value'; effort="$2"; explicit_selection=true; shift 2 ;;
     --allow-xhigh) allow_xhigh=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail 64 "Unknown argument: $1" ;;
@@ -46,12 +47,18 @@ mapfile -t profile_values <<< "$profile_output"
 model="${model:-${profile_values[0]:-}}"
 effort="${effort:-${profile_values[1]:-medium}}"
 project_instructions=("${profile_values[@]:2}")
+mode="$(node "$script_dir/route-plan.mjs" mode "$repo_root")" || fail 65 'Invalid routing activation'
+if [[ "$mode" == routed ]]; then
+  [[ "$explicit_selection" == false ]] || fail 64 'Routed execution selects model/variant deterministically; remove CLI model/effort overrides'
+  node "$script_dir/route-plan.mjs" check "$repo_root" "$allow_xhigh" || fail 75 'Routing preflight failed'
+else
 [[ "$model" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.:-]+$ ]] || fail 64 'Select a valid provider/model in .agents/executor.json or --model'
 case "$effort" in minimal|low|medium|high|xhigh) ;; *) fail 64 "Unsupported effort: $effort" ;; esac
 if [[ "$effort" == xhigh && "$allow_xhigh" != true ]]; then
   fail 64 'xhigh requires an explicit user request and --allow-xhigh'
 fi
 printf 'Repository: %s\nPlan: %s\nModel: %s\nEffort: %s\n' "$repo_root" "$plan" "$model" "$effort"
+fi
 # Build one deterministic handoff prompt. Stable executor rules and stable task skills
 # precede the changing plan so providers can reuse the longest possible prompt prefix.
 # Project AGENTS discovery is disabled for the delegated run because Codex has already
@@ -79,6 +86,9 @@ if [[ "$check_only" == true ]]; then
   printf '%s\n' 'Local prerequisites OK. No model call or report write; credentials and service availability are untested.'
   exit 0
 fi
+run_once() (
+set -e
+# A subshell reuses the existing report/failure contract for each execution.
 # Do not allow a previous run's SUCCESS to survive a failed/aborted invocation.
 cat > "$report" <<'REPORT'
 # Status
@@ -112,10 +122,18 @@ prompt_file="$(mktemp "$TMPDIR/executor-handoff.XXXXXXXX")"
 events_file="$(mktemp "$TMPDIR/executor-events.XXXXXXXX")"
 stderr_file="$(mktemp "$TMPDIR/executor-stderr.XXXXXXXX")"
 placeholder_file="$(mktemp "$TMPDIR/executor-placeholder.XXXXXXXX")"
+if [[ "$mode" == routed ]]; then
+  rm -f -- "$events_file" "$stderr_file" "$placeholder_file"
+  events_file="$route_dir/events.jsonl"
+  stderr_file="$route_dir/stderr.log"
+  placeholder_file="$route_dir/placeholder.md"
+fi
 cp -- "$report" "$placeholder_file"
 status=0
 cleanup() {
-  rm -f -- "$prompt_file" "$placeholder_file"
+  rm -f -- "$prompt_file"
+  if [[ "$mode" == routed ]]; then return; fi
+  rm -f -- "$placeholder_file"
   # Retain failed CLI events locally for targeted diagnosis; never dump transcripts.
   if ((status == 0)); then rm -f -- "$events_file" "$stderr_file"; fi
 }
@@ -145,11 +163,17 @@ printf '\n# Task plan\n' >> "$prompt_file"
 cat "$plan" >> "$prompt_file"
 prompt="$(cat "$prompt_file")"
 status=0
-OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run --agent build --model "$model" --variant "$effort" --format json "$prompt" </dev/null >"$events_file" 2>"$stderr_file" || status=$?
+variant_args=()
+if [[ -n "$effort" ]]; then variant_args=(--variant "$effort"); fi
+if [[ "$mode" == routed ]]; then
+  OPENCODE_CONFIG_CONTENT="$route_overlay" OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run --agent build --model "$model" "${variant_args[@]}" --format json "$prompt" </dev/null >"$events_file" 2>"$stderr_file" || status=$?
+else
+  OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run --agent build --model "$model" "${variant_args[@]}" --format json "$prompt" </dev/null >"$events_file" 2>"$stderr_file" || status=$?
+fi
 printf '\nExecutor CLI exit: %s. Report: %s\n' "$status" "$report"
 if ((status != 0)); then
   printf 'state=failed cli_exit=%s events_file=%s stderr_file=%s\n' "$status" "$events_file" "$stderr_file" >&2
-  printf 'Executor: OpenCode failed; no retry or model fallback. Inspect the error and report, not a second full code review.\n' >&2
+  if [[ "$mode" != routed ]]; then printf 'Executor: OpenCode failed; no retry or model fallback. Inspect the error and report, not a second full code review.\n' >&2; fi
   exit "$status"
 fi
 if [[ ! -s "$report" ]] || cmp -s -- "$report" "$placeholder_file"; then
@@ -180,3 +204,42 @@ case "$report_status" in
   BLOCKED) fail 3 'BLOCKED: Codex must resolve the reported decision or execution blocker' ;;
   *) fail 65 'Invalid report status; expected SUCCESS, PARTIAL or BLOCKED' ;;
 esac
+)
+
+if [[ "$mode" != routed ]]; then run_once; exit $?; fi
+
+# Separate workspace ownership prevents concurrent writers to the canonical plan/report.
+# Unsettled/interrupted starts retain both the lock and budget reservation for triage.
+node "$script_dir/route-plan.mjs" workspace-lock "$repo_root" || fail 75 'Workspace unavailable'
+managed_settled=true
+managed_cleanup() {
+  if [[ "$managed_settled" == true ]]; then node "$script_dir/route-plan.mjs" workspace-unlock "$repo_root"; fi
+}
+trap managed_cleanup EXIT
+previous=''
+for attempt in 0 1; do
+  selection="$(node "$script_dir/route-plan.mjs" admit "$repo_root" "$allow_xhigh" "$previous")" || fail 75 'No eligible budgeted start; inspect compact routing records'
+  managed_settled=false
+  mapfile -t selected <<< "$selection"
+  run_id="${selected[0]}"; model="${selected[1]}"; effort="${selected[2]:-}"
+  route_dir="$repo_root/artifacts/opencode/runs/$run_id"
+  route_overlay="$(node "$script_dir/route-plan.mjs" claim "$repo_root" "$run_id")" || fail 75 'Start authorization failed'
+  printf 'Routing: run_id=%s model=%s variant=%s decision=%s/decision.json\n' "$run_id" "$model" "${effort:-<base>}" "$route_dir"
+  result=0
+  # Keep errexit inside the execution subshell. Calling a function in an `||`
+  # list would disable it throughout prompt/report preparation as well.
+  set +e
+  run_once
+  result=$?
+  set -e
+  outcome="$(node "$script_dir/route-plan.mjs" finish "$repo_root" "$run_id" "$result")" || fail 75 'Usage settlement failed; reservation retained'
+  managed_settled=true
+  if ((result != 0 && attempt == 0)) && [[ "$outcome" == safe-technical-free-failure ]]; then
+    previous="$run_id"
+    printf 'Routing: safe technical Free failure; checking one default_go start.\n'
+    continue
+  fi
+  if ((result == 0)); then rm -f -- "$route_dir/events.jsonl" "$route_dir/stderr.log"; fi
+  printf 'state=routing_completed attempts=%s exit=%s outcome=%s/outcome.json\n' "$((attempt + 1))" "$result" "$route_dir"
+  exit "$result"
+done

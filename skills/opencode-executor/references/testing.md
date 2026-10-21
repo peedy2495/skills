@@ -1,11 +1,11 @@
 # Testing contract
 
-Use meaningful regression checks for behavior/risk, not a test for every reversible layout edit. Red–Green–Refactor is useful for logic/bugs; Chicago-style state assertions prefer real objects and isolated local stores, with fakes at external I/O. No mandatory refactor or automatic commit. Given–When–Then states outcomes; property tests are optional for invariants without implying a new dependency.
+Meaningful behavior/risk regressions, not tests for every reversible layout edit. Red–Green–Refactor suits logic/bugs; Chicago-style state assertions use real objects/isolated stores, fake external I/O. Neither mandatory refactor nor automatic commit. Given–When–Then states outcomes; optional invariant property tests imply no new dependency.
 
-Discover languages, versions and commands from the consuming repository's instructions/manifests/CI. Use its existing toolchain, fixtures and libraries. Multi-language changes get checks for affected languages and their boundaries. Do not install a universal test/lint stack, mandate browser tests for headless projects, or research unrelated ecosystems.
+Discover languages/versions/commands from consumer instructions/manifests/CI; reuse toolchain/fixtures/libraries. Check affected languages and boundaries. No universal test/lint stack, browser mandates for headless projects or unrelated ecosystem research.
 
-Run smallest relevant checks after logical sections; repair compiler/type/lint/test failures. Run consuming-project required gates before completion. Repeat successful gates only after relevant changes/failure/remaining risk. Delivery-only tasks reuse valid evidence.
+After logical sections, run smallest relevant checks; repair compiler/type/lint/test failures. Run required consumer gates before completion. Repeat successful gates only for relevant changes/failure/remaining risk. Delivery-only reuses valid evidence.
 
-For persistence/ingestion, cover pertinent failure, cancellation, rollback, preservation and boundary cases. For UI changes select ui.md as needed and check observable interaction rather than incidental markup. Keep reusable regressions in the project's established tests/scripts; scratch probes are not durable coverage.
+Persistence/ingestion: relevant failure/cancellation/rollback/preservation/boundary cases. UI: select ui.md as needed; test observable interaction, not incidental markup. Reusable regressions belong in established project tests/scripts; scratch probes are not durable coverage.
 
-Use isolated data/profiles: no destructive tests against live systems. Definition of Done records commands/counts, skipped checks with reasons, unresolved failures and self-review. No whole-repository audit or technology scan unless task/risk requires it.
+Use isolated data/profiles; no destructive live-system tests. Definition of Done: commands/counts, skips/reasons, unresolved failures, self-review. No whole-repo audit/technology scan without task/risk need.

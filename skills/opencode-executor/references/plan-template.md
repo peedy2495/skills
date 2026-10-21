@@ -1,62 +1,62 @@
 # Goal
 
-Ready: state the exact observable end state in a few sentences.
+Ready: exact observable end state in a few sentences.
 
 # Relevant Instructions
 
-List only task-specific skills/references the executor needs, using exact paths. Keep this list stable and minimal; the executor sorts paths before composing the handoff so identical skill sets form a reusable prompt prefix. Use `none` when the plan itself contains all required constraints.
+Only necessary task-specific skills/references, exact paths. Stable/minimal list; executor sorts paths for a reusable prompt prefix. Use `none` if plan supplies all constraints.
 
 - `.agents/skills/.../SKILL.md`
 
-Project-wide Markdown constraints come from the consumer profile, not a repeated plan entry. Record applicable nested instructions explicitly.
+Project-wide Markdown rules come from profile; do not repeat them here. Record applicable nested instructions explicitly.
 
 # Context
 
-- Relevant files/symbols and current behavior.
-- Dirty/staged/untracked user work that must be preserved, if any.
-- Material constraints, known risks and baseline failures.
+- Relevant files/symbols/current behavior.
+- Preserve dirty/staged/untracked user work, if any.
+- Material constraints, risks, baseline failures.
 
-Keep this section task-local; do not restate unrelated product requirements.
+Task-local only; no unrelated product requirements.
 
 # Implementation
 
 - [ ] `path/to/file`: concrete change and intended behavior.
 - [ ] `path/to/file`: concrete change and intended behavior.
 
-Name exact interfaces/types/state/persistence details only when they constrain the implementation. Local implementation details not affecting architecture/public contracts may be left to the executor.
+Specify interfaces/types/state/persistence only when constraining implementation. Local details without architecture/public-contract impact may be left to executor.
 
 # Milestones
 
-List only decision-relevant completion events that justify supervisor attention, or `none`. Running/testing states are not milestones. Executor owns routine repairs without supervisor intervention.
+Decision-relevant completion events warranting supervisor attention, or `none`. Running/testing are not milestones; executor owns routine repairs.
 
 # Verification
 
-Run only checks meaningful for this change, in order. The executor owns ordinary repair and reruns within the same execution; reserve only one focused supervisor quality check afterward, not automatic test reruns.
+Meaningful checks only, in order. Executor owns ordinary repair/reruns in the same execution; one focused supervisor review afterward, no automatic test reruns.
 
-- [ ] Smallest focused check/test that proves the changed behavior.
-- [ ] Broader build/test only when scope or risk warrants it; avoid broad suites "just in case".
+- [ ] Smallest check/test proving changed behavior.
+- [ ] Broader build/test only for scope/risk, never "just in case".
 - [ ] `git diff --check` when applicable.
-- [ ] Self-review actual changes against this plan and preserve unrelated user work.
+- [ ] Self-review actual changes against plan; preserve unrelated user work.
 
 # Acceptance Criteria — Given–When–Then where useful
 
 - [ ] Concrete observable requirement.
 - [ ] Relevant checks pass or documented baseline exceptions remain unchanged.
-- [ ] `.agents/IMPLEMENTATION_REPORT.md` records actual status, verification, deviations and blockers.
+- [ ] `.agents/IMPLEMENTATION_REPORT.md`: actual status, verification, deviations, blockers.
 
 # Progress — Hemingway Bridge
 
-Update checked steps as soon as completed. Record concise verification results and the next unfinished action here before long checks or interruption; preserve this evidence on continuation.
+Check completed steps immediately. Record concise verification/next unfinished action before long checks/interruption; preserve evidence on continuation.
 
 # Out of Scope
 
-List only important boundaries that could otherwise be mistaken as part of the task.
+Only important boundaries otherwise mistaken for task scope.
 
 # Optional Architecture Detail
 
-Include this section only when needed for cross-cutting architecture, persistence/migration semantics, security/concurrency boundaries, or materially different implementation choices.
+Include only for cross-cutting architecture, persistence/migration, security/concurrency boundaries or materially different implementation choices.
 
-- Required interfaces/contracts and ownership boundaries.
-- Data/control flow and lifecycle/cancellation semantics.
+- Required interfaces/contracts/ownership.
+- Data/control flow; lifecycle/cancellation.
 - Error/rollback/persistence behavior.
-- Chosen design and materially rejected alternatives.
+- Chosen design/materially rejected alternatives.

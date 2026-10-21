@@ -1,15 +1,15 @@
 # Goal
 
-Completed: explicitly apply semantic-anchor guidance to both shared and project-local skills without weakening concrete constraints.
+Completed: extend semantic-anchor guidance to shared/project-local skills; preserve concrete constraints.
 
 # Implementation
 
-- [x] Broaden skill-maintenance discovery scope and clarify conditional anchor use with explicit project rules and safeguards.
+- [x] Broaden skill-maintenance discovery; clarify conditional anchors, explicit project rules/safeguards.
 
 # Verification
 
-- [x] Library checks, skill validation and focused diff review.
+- [x] Library checks, skill validation, focused diff review.
 
 # Progress
 
-Completed: library checks, skill validation, whitespace check and focused review passed. No model call, commit or push.
+Completed: library/skill/whitespace checks and focused review passed. No model call/commit/push.

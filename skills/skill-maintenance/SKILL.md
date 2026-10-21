@@ -1,18 +1,18 @@
 ---
 name: skill-maintenance
-description: Maintain shared and project-local coding skills, routing and execution contracts when explicitly requested. Keep task history and application behavior out of reusable instructions.
+description: Maintain shared/project-local coding skills, routing and execution contracts on explicit request. Exclude task history and application behavior from reusable guidance.
 ---
 
 # Skill maintenance
 
-Use only for explicit instruction/workflow maintenance, not as a side effect of feature work. Perform directly; use the executor skill only to understand its interfaces when changing that workflow.
+Apply only to explicit instruction/workflow maintenance, never incidental feature work. Work directly; consult the executor skill only for interfaces when changing its workflow.
 
-Progressive Disclosure: keep discovery metadata precise and the entrypoint small. Route only materially relevant references; no load-all rules or reference catalogs. Create a separate skill only for recurring distinct work, not each language or transient feature.
+Progressive Disclosure: precise metadata, small entrypoint, only materially relevant references. No load-all rules/catalogs. Separate skills require recurring distinct work, not a language or transient feature.
 
-SSOT/DRY: one normative source per rule, shared runner not copied scripts. Application behavior, toolchain commands, model choices and user language belong to consumer profiles/instructions. Current implementation/tests establish behavior; history resolves concrete uncertainty, not default requirements. Do not maintain appended context diaries or snapshots as active guidance.
+SSOT/DRY: one normative source per rule; shared runner, no copied scripts. Consumer profiles/instructions own application behavior, toolchain commands, model choices and user language. Current implementation/tests establish behavior; consult history only for concrete uncertainty. No appended context diaries/snapshots as active guidance.
 
-When creating or revising shared or project-local skills, prefer established semantic anchors wherever they meaningfully shorten instructions without ambiguity or loss of required behavior. Keep project-specific rules, safety/authorization boundaries, verifiable requirements, events, paths and machine schemas explicit. Prefer removing/narrowing overlapping instructions. KISS/YAGNI is not authority to discard safeguards. Use Definition of Done for completion, Hemingway Bridge for resumable task state, BLUF for reports. Explain a new anchor briefly when ambiguous; do not inject an external catalog or assume all models interpret it identically.
+For shared/project-local skills, prefer established semantic anchors only when shorter, unambiguous and behavior-preserving. Keep project rules, safety/authorization boundaries, verifiable requirements, events, paths and machine schemas explicit. Remove/narrow overlaps first. KISS/YAGNI never discards safeguards. Definition of Done governs completion; Hemingway Bridge preserves resumable state; BLUF structures reports. Briefly explain ambiguous anchors; neither inject external catalogs nor assume identical model interpretations.
 
-Keep stable prompt content before dynamic task data, sorted deterministically. Do not load irrelevant text merely for cache hits; fewer calls and less context take priority. Host communication/tool requirements still apply.
+Place stable prompt content before dynamic data, deterministically sorted. Never load irrelevant text for cache hits: fewer calls/less context take priority. Host communication/tool requirements still apply.
 
-Validate actual script behavior with isolated fakes, not real paid model calls by default. Check consumer compatibility, exact instruction delivery, failure/status semantics and scope. Compare word/byte counts separately from model quality. For quality claims evaluate representative tasks on the selected model with identical budgets and objective acceptance checks; do not mistake a shorter prompt for proven equivalence. Update documentation only for material setup/contract changes, not every edit.
+Validate script behavior with isolated fakes, not real paid calls by default: consumer compatibility, exact instruction delivery, failure/status semantics and scope. Word/byte counts do not measure quality. Quality claims require representative tasks on the selected model, identical budgets and objective acceptance checks; shorter prompts do not prove equivalence. Update docs for material setup/contract changes, not every edit.

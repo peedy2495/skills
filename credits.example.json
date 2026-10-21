@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "billing": {
+    "enabled": false,
+    "period": "initial",
+    "limit_micro_usd": 0,
+    "per_run_limit_micro_usd": 0,
+    "reserves_micro_usd": {
+      "repair": 0,
+      "validation": 0
+    }
+  },
+  "volume": {
+    "enabled": false,
+    "wait_for_reset": false,
+    "max_percent": {
+      "rolling": 100,
+      "weekly": 100,
+      "monthly": 100
+    },
+    "reserves_percent": {
+      "repair": 15,
+      "validation": 15
+    },
+    "rounding_margin_percent": 1,
+    "timeout_ms": 10000,
+    "allowances": {}
+  },
+  "extra_credit_budget_micro_usd": 0,
+  "state": {
+    "period": "initial",
+    "account_hash": null,
+    "snapshot": null,
+    "runs": {}
+  }
+}

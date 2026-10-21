@@ -4,8 +4,8 @@ SUCCESS
 
 # Implemented
 
-- Skill-maintenance scope now explicitly includes project-local skills.
-- Established semantic anchors are preferred where they meaningfully shorten instructions without ambiguity or behavior loss; concrete project requirements and safeguards remain explicit.
+- Skill-maintenance explicitly covers project-local skills.
+- Prefer established semantic anchors only for unambiguous, behavior-preserving shortening; keep concrete project requirements/safeguards explicit.
 
 # Changed Files
 
@@ -16,7 +16,7 @@ SUCCESS
 - bash scripts/check.sh — passed.
 - Skill quick_validate.py — passed.
 - git diff --check and focused review — passed.
-- Documentation only; no model call, commit or push.
+- Documentation only; no model call/commit/push.
 
 # Plan Deviations
 

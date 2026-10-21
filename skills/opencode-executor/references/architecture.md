@@ -1,7 +1,7 @@
 # Optional architecture decisions
 
-Load only for material interface, data, concurrency, migration, security or technology decisions. Inspect current boundaries and tests first. KISS/YAGNI: choose the smallest change that meets the task; no pattern tourism, universal framework scan or speculative abstraction.
+Read only for material interface/data/concurrency/migration/security/technology decisions. Inspect current boundaries/tests first. KISS/YAGNI: smallest sufficient change; no pattern tourism, universal framework scan or speculative abstraction.
 
-Use Design by Contract for affected inputs/outputs/invariants/failure semantics. Use a short Nygard ADR (context, decision, consequences) only for a durable actual decision; a diagram only if useful. Compare alternatives and official sources when a new technology choice is necessary, not for routine edits. Thin Vertical Slice can bound implementation while retaining end-to-end value.
+Design by Contract: affected inputs/outputs/invariants/failure semantics. A short Nygard ADR (context, decision, consequences) requires a durable actual decision; diagrams require usefulness. Compare alternatives/official sources only for necessary new technology choices, not routine edits. Thin Vertical Slice bounds implementation while retaining end-to-end value.
 
-Do not freeze accidental legacy behavior, but a demonstrably false approved-plan assumption is a blocker: explain evidence and required decision rather than redesigning silently. User authorization governs destructive migrations and external actions.
+Accidental legacy behavior need not be frozen. A demonstrably false approved-plan assumption blocks: explain evidence/required decision, never silently redesign. Destructive migrations/external actions require user authorization.
