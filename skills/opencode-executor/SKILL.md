@@ -11,6 +11,8 @@ Supervisor plans/checks; executor implements/repairs. One handoff, one focused r
 
 Initial integration or broken/missing links/profiles: [README.md](../../README.md), “Connect a project”; skip setup in configured projects.
 
+Runtime migration/configuration/failures only: [opencode-v2.md](references/opencode-v2.md). Native V2 standalone client owns server/events/wait; V1 invocation remains compatible. Never load runtime administration into handoffs.
+
 Delegation: read [supervision.md](references/supervision.md). Runner injects execution contract, seven rules and report schema; never reinject this supervisor skill/reference. Plan references: [testing.md](references/testing.md) for substantive implementation, [ui.md](references/ui.md) for actual interfaces, [architecture.md](references/architecture.md) for boundary/technology decisions. Never load whole catalogs, unrelated languages or adjacent skills as background.
 
 ## Design by Contract

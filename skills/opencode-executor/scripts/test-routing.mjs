@@ -1,6 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync, statSync, readdirSync, chmodSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
@@ -8,7 +8,7 @@ import { catalog, digest, axes, phases, configuration, taskClass, scoreFromRevie
 import { select, contextHash, admit, claim, finish } from './route-plan.mjs';
 import { readState, checkBudget, totals, transaction } from './budget.mjs';
 import { collectUsage } from './collect-usage.mjs';
-import { parseModels, buildCatalog, cliBilling } from './refresh-model-catalog.mjs';
+import { parseModels, buildCatalog, cliBilling, publishCatalog } from './refresh-model-catalog.mjs';
 import { globalCatalogDirectory, globalCatalogPath } from './catalog-store.mjs';
 import { withCredits, normalizeUsage, validateCredits, usageURL } from './credits.mjs';
 
@@ -25,6 +25,7 @@ const path = require('node:path');
 const args = process.argv.slice(2);
 const line = value => fs.writeSync(1, value + '\\n');
 const put = value => line(JSON.stringify(value));
+if (args[0] === '--version' && process.env.EXECUTOR_VERSION_PROBE === '1') { line(process.env.ROUTING_TEST_CLI_VERSION || '1.18.31'); process.exit(0); }
 const captureRoot = process.env.ROUTING_TEST_CAPTURE_ROOT || process.cwd();
 fs.mkdirSync(path.join(captureRoot, 'artifacts/opencode'), { recursive: true });
 const call = { command: args.slice(0, 3) };
@@ -680,7 +681,7 @@ test('explicit global bootstrap records verified variants/prices but never fabri
     cost: { input: 0, output: 0, cache: { read: 0, write: 0 } } };
   const metadata = join(base, 'global-metadata.json'); writeFileSync(metadata, JSON.stringify(models));
   const invoke = revision => spawnSync(process.execPath, [join(root, '.agents/skills/opencode-executor/scripts/refresh-model-catalog.mjs'), '--update', '--global', '--revision', revision],
-    { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, ROUTING_TEST_MODELS: metadata, ROUTING_TEST_CAPTURE_ROOT: root }, timeout: 10000 });
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, ROUTING_TEST_MODELS: metadata, ROUTING_TEST_CAPTURE_ROOT: root }, timeout: 10000 });
   successful(invoke('global-fixture-r1'));
   const c = catalog(JSON.parse(readFileSync(globalCatalogPath(), 'utf8')));
   assert.equal(c.schema_version, 2); assert.equal(c.source.scope, 'global'); assert.equal(c.entries.length, 0);
@@ -729,7 +730,7 @@ test('published evidence enriches CLI inventory, stays provisional and requires 
   const metadata = join(base, 'publication-metadata.json'); writeFileSync(metadata, JSON.stringify(models));
   const file = join(base, 'publication-assessments.json');
   const invoke = (revision, supplied = false) => spawnSync(process.execPath, [join(scripts, 'refresh-model-catalog.mjs'), '--update', '--global', '--revision', revision,
-    ...(supplied ? ['--assessments', file] : [])], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 10000,
+    ...(supplied ? ['--assessments', file] : [])], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 10000,
     env: { ...process.env, ROUTING_TEST_MODELS: metadata, ROUTING_TEST_CAPTURE_ROOT: root } });
   successful(invoke('publication-draft'));
   const draft = catalog(JSON.parse(readFileSync(globalCatalogPath(), 'utf8')));
@@ -761,7 +762,7 @@ test('published evidence enriches CLI inventory, stays provisional and requires 
   const retained = readFileSync(globalCatalogPath(), 'utf8');
   assert.deepEqual(JSON.parse(retained).entries[0].assessment, grades);
   for (const a of Object.values(JSON.parse(retained).entries[0].assessment).filter(a => a.review)) assert.equal(scoreFromReview(a.review, a.sources), a.score);
-  assert.equal(readFileSync(join(globalCatalogDirectory(), 'revisions', `${digest('publication-retained')}.json`), 'utf8'), retained);
+  assert.equal(existsSync(join(globalCatalogDirectory(), 'revisions')), false);
   supplied.revision = 'publication-invalid';
   delete supplied.entries[0].variant_hash;
   writeFileSync(file, JSON.stringify(supplied)); assert.equal(invoke(supplied.revision, true).status, 65);
@@ -853,7 +854,7 @@ test('refresh is explicit, local CLI only, validates effective custom variants, 
   successful(invoke(args)); assert.equal(configuration(root).c.revision, 'fixture-r2');
   assert.deepEqual(calls(root).map(c => c.command[0]), ['--version', 'debug', 'debug', 'models']);
   const stored = readFileSync(join(root, '.agents/model-catalog.json'), 'utf8'); assert.doesNotMatch(stored, /PRIVATE_CONFIG_SENTINEL/);
-  assert.equal(readdirSync(join(root, 'artifacts/opencode/catalog-revisions')).length, 2);
+  assert.equal(existsSync(join(root, 'artifacts/opencode/catalog-revisions')), false);
   assert.equal(invoke(args).status, 65); assert.equal(readFileSync(join(root, '.agents/model-catalog.json'), 'utf8'), stored);
   assert.equal(configuration(root).c.entries[1].rates.input, 100000);
   annotations.revision = 'fixture-r3'; annotations.entries[0].variant = 'imaginary-high'; save(root, '.agents/assessments.json', annotations);
@@ -866,4 +867,60 @@ test('refresh is explicit, local CLI only, validates effective custom variants, 
   annotations.entries = [annotations.entries[1]];
   models['fixture/go'].cost.experimentalOver200K = { input: 3, output: 6 };
   assert.equal(buildCatalog(root, new Map(Object.entries(models)), annotations, cfg.c.source).entries[0].rates, null);
+});
+
+test('successful catalog publication keeps only current data and prunes owned artifacts without touching audits, sources or symlink targets', () => {
+  for (const global of [false, true]) {
+    const root = fixture(), previous = configuration(root).c;
+    const target = global ? join(root, 'global-model-routing/catalog.json') : join(root, '.agents/model-catalog.json');
+    mkdirSync(join(root, global ? 'global-model-routing' : '.agents'), { recursive: true });
+    writeFileSync(target, JSON.stringify(previous));
+    const store = global ? join(root, 'global-model-routing') : join(root, '.agents');
+    const scratch = join(root, 'artifacts/opencode'); mkdirSync(scratch, { recursive: true });
+    for (const path of [...(global ? [join(store, 'revisions')] : []), join(store, 'catalog-update-old'), join(scratch, 'catalog-revisions'), join(scratch, 'catalog-update'), join(scratch, 'catalog-update-old')]) {
+      mkdirSync(path); writeFileSync(join(path, 'invalid.json'), '{obsolete', { mode: 0o400 });
+    }
+    const temp = `${target}.00000000-0000-0000-0000-000000000000`; writeFileSync(temp, '{orphan');
+    const foreign = join(root, 'unrelated'); mkdirSync(foreign); writeFileSync(join(foreign, 'keep'), 'preserved');
+    symlinkSync(foreign, join(scratch, 'catalog-update-linked'));
+    const protectedPaths = [join(store, 'notes.txt'), ...(global ? [] : [join(store, 'revisions/unrelated.txt')]), `${target}.manual-backup`, join(scratch, 'runs/decision.json'), join(scratch, 'budget/state.json'), join(scratch, 'v2-migration/report.md'), join(root, '.agents/assessments.json')];
+    for (const path of protectedPaths) { mkdirSync(resolve(path, '..'), { recursive: true }); writeFileSync(path, 'preserved'); }
+    const next = { ...previous, revision: 'only-current' };
+    assert.equal(publishCatalog(target, next, previous, [root]), global ? 7 : 6);
+    assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')), next); assert.match(readFileSync(target, 'utf8'), /\n  "schema_version"/);
+    for (const name of ['catalog-revisions', 'catalog-update', 'catalog-update-old', 'catalog-update-linked']) assert.equal(existsSync(join(scratch, name)), false);
+    assert.equal(existsSync(join(store, 'revisions')), !global); assert.equal(existsSync(join(store, 'catalog-update-old')), false); assert.equal(existsSync(temp), false);
+    for (const path of [...protectedPaths, join(foreign, 'keep')]) assert.equal(readFileSync(path, 'utf8'), 'preserved');
+    assert.equal(existsSync(`${target}.lock`), false);
+  }
+});
+
+test('invalid catalogs, stale captures and active publisher locks cannot replace data or trigger cleanup', () => {
+  const root = fixture(), previous = configuration(root).c, target = join(root, '.agents/model-catalog.json');
+  const scratch = join(root, 'artifacts/opencode/catalog-update-old'); mkdirSync(scratch, { recursive: true }); writeFileSync(join(scratch, 'keep'), 'preserved');
+  const before = readFileSync(target, 'utf8'), next = { ...previous, revision: 'not-yet-current' };
+  assert.throws(() => publishCatalog(target, { ...next, schema_version: 999 }, previous, [root]));
+  assert.throws(() => publishCatalog(target, previous, previous, [root]), /new catalog revision/);
+  assert.throws(() => publishCatalog(target, next, { ...previous, revision: 'stale-capture' }, [root]), /changed during capture/);
+  mkdirSync(`${target}.lock`); assert.throws(() => publishCatalog(target, next, previous, [root]), /busy or interrupted/); assert(existsSync(`${target}.lock`)); rmSync(`${target}.lock`, { recursive: true });
+  assert.equal(readFileSync(target, 'utf8'), before); assert.equal(readFileSync(join(scratch, 'keep'), 'utf8'), 'preserved');
+});
+
+test('catalog cleanup rejects an escaping scratch root before publication', () => {
+  const root = fixture(), previous = configuration(root).c, target = join(root, '.agents/model-catalog.json');
+  const outside = join(base, 'outside-catalog-artifacts'); mkdirSync(join(outside, 'opencode/catalog-update-old'), { recursive: true }); writeFileSync(join(outside, 'opencode/catalog-update-old/keep'), 'preserved');
+  symlinkSync(outside, join(root, 'artifacts'));
+  const before = readFileSync(target, 'utf8');
+  assert.throws(() => publishCatalog(target, { ...previous, revision: 'unsafe-root' }, previous, [root]), /stay in consuming project/);
+  assert.equal(readFileSync(target, 'utf8'), before); assert.equal(readFileSync(join(outside, 'opencode/catalog-update-old/keep'), 'utf8'), 'preserved'); assert.equal(existsSync(`${target}.lock`), false);
+});
+
+test('post-publication cleanup failure reports the committed catalog instead of claiming rollback', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  const root = fixture(), previous = configuration(root).c, target = join(root, '.agents/model-catalog.json');
+  const obsolete = join(root, 'artifacts/opencode/catalog-revisions'); mkdirSync(obsolete, { recursive: true }); writeFileSync(join(obsolete, 'old.json'), '{obsolete'); chmodSync(obsolete, 0o500);
+  const next = { ...previous, revision: 'committed-cleanup-incomplete' };
+  try {
+    assert.throws(() => publishCatalog(target, next, previous, [root]), e => e.safe && e.published && /cleanup incomplete/.test(e.message));
+    assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')), next); assert(existsSync(join(obsolete, 'old.json'))); assert.equal(existsSync(`${target}.lock`), false);
+  } finally { chmodSync(obsolete, 0o700); }
 });

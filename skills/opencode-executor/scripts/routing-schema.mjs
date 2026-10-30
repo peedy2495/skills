@@ -53,8 +53,8 @@ export function catalog(c) {
   const pending = c.unassessed ?? [];
   for (const e of [...c.entries, ...pending]) {
     object(e, ['model', 'variant', 'variant_hash', 'context', 'output', 'tool_use', 'billing', 'rates', 'assessment', 'evidence', 'requires_xhigh', 'outcomes'], ['input', 'pricing', 'billing_evidence']);
-    assert(typeof e.model === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.:-]+$/.test(e.model), 'Invalid model ID');
-    assert(e.variant === null || (text(e.variant) && e.variant.length <= 100), 'Invalid variant ID');
+    assert(typeof e.model === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./:-]+$/.test(e.model), 'Invalid model ID');
+    assert(e.variant === null || (text(e.variant) && e.variant.length <= 100 && !e.variant.includes('#')), 'Invalid variant ID');
     assert(!seen.has(key(e)), 'Duplicate model/variant'); seen.add(key(e));
     assert(text(e.variant_hash) && integer(e.context) && e.context > 0 && integer(e.output) && e.output > 0 && e.tool_use === true, 'Unqualified model metadata');
     assert(e.input === undefined || e.input === null || integer(e.input), 'Invalid input limit');

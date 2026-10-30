@@ -14,7 +14,7 @@ try {
   if (Object.keys(p).some(k => !['model','effort','instructions'].includes(k))) throw Error();
   const model = p.model ?? '';
   const effort = p.effort ?? 'medium';
-  if (typeof model !== 'string' || (model && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.:-]+$/.test(model))) throw Error();
+  if (typeof model !== 'string' || (model && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./:-]+$/.test(model))) throw Error();
   if (!['minimal','low','medium','high','xhigh'].includes(effort)) throw Error();
   const inputs = p.instructions;
   if (!Array.isArray(inputs)) throw Error();

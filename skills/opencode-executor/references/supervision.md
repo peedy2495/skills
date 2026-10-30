@@ -6,6 +6,8 @@ Analyze NEW completion, failure, blocker, input request, test/build/compile erro
 
 Prefer completion notifications/event-driven waits. Never tail logs/invoke AI merely to confirm activity. If monitoring is necessary, filter outside AI: invocation-specific event ID/sequence/byte cursor, new complete records only, buffer partials, deduplicate state/error fingerprints, batch relevant deltas. Reset cursor per invocation. No relevant delta: no model payload. Longest host-permitted wait; communication/tool limits prevail without implying progress.
 
+V2 runner uses native standalone event subscription/session wait/reconciliation; supervisor waits for the existing process, not a second API/AI loop. Session ID is diagnostic correlation, never permission to resume/replay. Runtime troubleshooting only: [opencode-v2.md](opencode-v2.md).
+
 Example: `phase=browser_tests state=completed tests=28 failed=0`. Raw logs local; bounded new failure excerpts only. Never reprocess full transcripts, unchanged files or known results; never expose secrets.
 
 Configured router owns safe technical Free-to-Go fallback, returning one final outcome/bounded audit. Codex neither selects models nor refreshes catalog. Unsafe/unknown/terminal failures need domain evaluation, never unchanged retry.

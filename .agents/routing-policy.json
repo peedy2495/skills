@@ -60,51 +60,7 @@
       "variant": "max"
     },
     {
-      "model": "opencode/longcat-2.5-preview-free",
-      "variant": null
-    },
-    {
-      "model": "opencode/longcat-2.5-preview-free",
-      "variant": "high"
-    },
-    {
-      "model": "opencode/longcat-2.5-preview-free",
-      "variant": "low"
-    },
-    {
-      "model": "opencode/longcat-2.5-preview-free",
-      "variant": "medium"
-    },
-    {
       "model": "opencode/mimo-v2.6-flash-free",
-      "variant": null
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": null
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": "high"
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": "low"
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": "max"
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": "medium"
-    },
-    {
-      "model": "opencode/minimax-m3.1-flash-free",
-      "variant": "xhigh"
-    },
-    {
-      "model": "opencode/nemotron-3-ultra-free",
       "variant": null
     },
     {

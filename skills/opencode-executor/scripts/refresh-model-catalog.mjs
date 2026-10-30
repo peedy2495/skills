@@ -1,12 +1,12 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, mkdirSync, existsSync, realpathSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { assert, axes, catalog, digest, json, key, local, object, text } from './routing-schema.mjs';
 import { contextHash } from './route-plan.mjs';
 import { atomicJSON } from './budget.mjs';
-import { globalCatalogDirectory, globalCatalogPath } from './catalog-store.mjs';
+import { globalCatalogPath } from './catalog-store.mjs';
+import { readCLIMetadata } from './read-cli-metadata.mjs';
 
 // `models --verbose` is a sequence of ID lines and pretty JSON objects, not JSONL.
 export function parseModels(output) {
@@ -83,7 +83,7 @@ export function buildCatalog(root, models, assessments, source, agent = {}, excl
       context: m.limit?.context, input: m.limit?.input ?? null, output: m.limit?.output, tool_use: m.capabilities.toolcall,
       billing, rates, assessment: a.assessment, evidence: a.evidence,
       ...(classified.billing === 'unknown' ? {} : { billing_evidence: classified.evidence }),
-      requires_xhigh: a.variant === 'xhigh' || agent.variant === 'xhigh' || !!xhigh([m.options, v, agent]), outcomes: a.outcomes,
+      requires_xhigh: a.variant === 'xhigh' || agent.variant === 'xhigh' || agent.model?.variant === 'xhigh' || !!xhigh([m.options, v, agent]), outcomes: a.outcomes,
       ...(source.scope === 'global' ? { pricing: advertisedPrices(m.cost) } : {}) });
   }
   assert(entries.length > 0, 'No qualified combinations supplied; existing catalog preserved');
@@ -124,18 +124,45 @@ export function enrichAssessments(initial, supplied) {
   }
   return { ...supplied, entries: initial.entries.map(a => updates.get(key(a)) ?? a) };
 }
-function publish(target, revisions, result, previous) {
-  assert(previous?.revision !== result.revision, 'Use a new catalog revision');
-  mkdirSync(revisions, { recursive: true, mode: 0o700 });
-  const archive = c => join(revisions, `${digest(c.revision)}.json`);
-  assert(!existsSync(archive(result)), 'Catalog revision already used; choose a new revision');
-  if (previous) {
-    const path = archive(previous);
-    if (existsSync(path)) assert(digest(JSON.parse(readFileSync(path, 'utf8'))) === digest(previous), 'Catalog revision content changed');
-    else writeFileSync(path, JSON.stringify(previous, null, 2) + '\n', { flag: 'wx', mode: 0o400 });
+// Only these updater-owned namespaces are disposable; never scan other projects
+// or delete user-supplied assessment sources outside these scratch directories.
+function obsoleteArtifacts(target, artifactRoots) {
+  const paths = new Set(), owned = name => ['catalog-revisions', 'catalog-update'].includes(name) || name.startsWith('catalog-update-');
+  const directory = dirname(target);
+  for (const name of readdirSync(directory)) {
+    const suffix = name.slice(basename(target).length + 1);
+    if ((basename(target) === 'catalog.json' && name === 'revisions') || owned(name) || (name.startsWith(`${basename(target)}.`) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(suffix))) paths.add(join(directory, name));
   }
-  writeFileSync(archive(result), JSON.stringify(result, null, 2) + '\n', { flag: 'wx', mode: 0o400 });
-  atomicJSON(target, result, 2);
+  for (const root of new Set(artifactRoots)) {
+    const scratch = local(root, 'artifacts/opencode');
+    if (existsSync(scratch)) for (const name of readdirSync(scratch)) if (owned(name)) paths.add(join(scratch, name));
+  }
+  return [...paths];
+}
+export function publishCatalog(target, result, previous, artifactRoots = []) {
+  catalog(result);
+  assert(previous?.revision !== result.revision, 'Use a new catalog revision');
+  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+  const lock = `${target}.lock`;
+  try { mkdirSync(lock); } catch (e) {
+    assert(e.code !== 'EEXIST', 'Catalog update busy or interrupted; inspect lock, never steal it'); throw e;
+  }
+  let committed = false;
+  try {
+    const current = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
+    assert(digest(current) === digest(previous ?? null), 'Catalog changed during capture; repeat explicit update');
+    // Resolve cleanup scope before commit. Removing a directory symlink unlinks
+    // it; rm never follows it into another project or installation.
+    const obsolete = obsoleteArtifacts(target, artifactRoots);
+    atomicJSON(target, result, 2); committed = true;
+    for (const path of obsolete) rmSync(path, { recursive: true, force: true });
+    return obsolete.length;
+  } catch (e) {
+    if (committed) throw Object.assign(Error('Current catalog published; obsolete artifact cleanup incomplete; inspect updater-owned paths'), { safe: true, published: true });
+    throw e;
+  } finally {
+    rmSync(lock, { recursive: true });
+  }
 }
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])) {
   try {
@@ -157,18 +184,13 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
     const scope = global ? 'global' : 'project';
     const target = global ? globalCatalogPath() : local(root, '.agents/model-catalog.json');
     const previous = existsSync(target) ? catalog(JSON.parse(readFileSync(target, 'utf8'))) : null;
-    const env = { ...process.env, OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_DISABLE_MODELS_FETCH: '1' };
-    const cli = args => execFileSync('opencode', args, { cwd: root, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-    const before = contextHash(root, scope), version = cli(['--version']).trim();
-    assert(text(version), 'Cannot determine OpenCode version');
-    // These commands do not perform inference. Never retain raw configuration.
-    const resolved = JSON.parse(cli(['debug', 'config']));
-    const agent = JSON.parse(cli(['debug', 'agent', 'build']));
-    const output = cli(['models', '--verbose']);
-    assert(before === contextHash(root, scope), 'Configuration changed during catalog capture');
-    const models = parseModels(output);
+    // Version/metadata reads are administrative only; never inference.
+    let before;
+    const captured = readCLIMetadata(root, parseModels, undefined, version => { before = contextHash(root, scope, version); });
+    assert(before === contextHash(root, scope, captured.version), 'Configuration changed during catalog capture');
+    const { models, agent, version } = captured;
     const source = { kind: 'opencode-cli', cli_version: version, captured_at: new Date().toISOString(), context_hash: before,
-      metadata_hash: digest([output, resolved, agent]), ...(global ? { scope: 'global' } : {}) };
+      metadata_hash: digest(captured.metadata), ...(global ? { scope: 'global' } : {}) };
     let exclusions = [];
     if (global) {
       const initial = initialAssessments(models, revision, previous, source, agent);
@@ -176,8 +198,7 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
       exclusions = initial.exclusions;
     }
     const result = buildCatalog(root, models, annotations, source, agent, exclusions);
-    const revisions = global ? join(globalCatalogDirectory(), 'revisions') : local(root, 'artifacts/opencode/catalog-revisions');
-    publish(target, revisions, result, previous);
-    console.log(`Catalog updated: qualified=${result.entries.length} unassessed=${result.unassessed?.length ?? 0} excluded=${result.exclusions?.length ?? 0}; revision=${result.revision}; target=${target}`);
-  } catch (e) { console.error(`Catalog update failed: ${e.safe ? e.message : 'invalid CLI output or configuration; previous catalog preserved'}`); process.exitCode = 65; }
+    const removed = publishCatalog(target, result, previous, [global ? process.cwd() : root]);
+    console.log(`Catalog updated: qualified=${result.entries.length} unassessed=${result.unassessed?.length ?? 0} excluded=${result.exclusions?.length ?? 0}; revision=${result.revision}; removed_artifacts=${removed}; target=${target}`);
+  } catch (e) { console.error(`${e.published ? 'Catalog cleanup incomplete' : 'Catalog update failed'}: ${e.safe ? e.message : 'invalid CLI output, configuration or filesystem state; inspect current catalog'}`); process.exitCode = 65; }
 }

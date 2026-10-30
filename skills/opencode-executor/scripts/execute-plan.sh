@@ -52,7 +52,7 @@ if [[ "$mode" == routed ]]; then
   [[ "$explicit_selection" == false ]] || fail 64 'Routed execution selects model/variant deterministically; remove CLI model/effort overrides'
   node "$script_dir/route-plan.mjs" check "$repo_root" "$allow_xhigh" || fail 75 'Routing preflight failed'
 else
-[[ "$model" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.:-]+$ ]] || fail 64 'Select a valid provider/model in .agents/executor.json or --model'
+[[ "$model" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_./:-]+$ ]] || fail 64 'Select a valid provider/model in .agents/executor.json or --model'
 case "$effort" in minimal|low|medium|high|xhigh) ;; *) fail 64 "Unsupported effort: $effort" ;; esac
 if [[ "$effort" == xhigh && "$allow_xhigh" != true ]]; then
   fail 64 'xhigh requires an explicit user request and --allow-xhigh'
@@ -85,6 +85,14 @@ done
 if [[ "$check_only" == true ]]; then
   printf '%s\n' 'Local prerequisites OK. No model call or report write; credentials and service availability are untested.'
   exit 0
+fi
+runtime_output="$(node "$script_dir/opencode-runtime.mjs" probe)" || fail 69 'OpenCode runtime unavailable'
+mapfile -t runtime_values <<< "$runtime_output"
+runtime_major="${runtime_values[0]}"
+cli_version="${runtime_values[1]}"
+if [[ "$runtime_major" == 2 ]]; then
+  # Validate restrictive native config before any routed reservation or report write.
+  route_overlay="$(node "$script_dir/opencode-runtime.mjs" overlay "$cli_version" "$model")" || fail 65 'Invalid V2 execution configuration'
 fi
 run_once() (
 set -e
@@ -161,13 +169,19 @@ else
 fi
 printf '\n# Task plan\n' >> "$prompt_file"
 cat "$plan" >> "$prompt_file"
-prompt="$(cat "$prompt_file")"
 status=0
 variant_args=()
 if [[ -n "$effort" ]]; then variant_args=(--variant "$effort"); fi
-if [[ "$mode" == routed ]]; then
+if [[ "$runtime_major" == 2 ]]; then
+  selection="$model"; if [[ -n "$effort" ]]; then selection+="#$effort"; fi
+  # Native V2 CLI leases an authenticated private server, consumes session events,
+  # waits/reconciles completion, and accepts the exact handoff on stdin (not argv).
+  OPENCODE_CONFIG_CONTENT="$route_overlay" OPENCODE_CONFIG_PROJECT_DISABLE=1 OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_DISABLE_MODELS_FETCH=1 opencode run --standalone --agent build --model "$selection" --title Executor --format json <"$prompt_file" >"$events_file" 2>"$stderr_file" || status=$?
+elif [[ "$mode" == routed ]]; then
+  prompt="$(cat "$prompt_file")"
   OPENCODE_CONFIG_CONTENT="$route_overlay" OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run --agent build --model "$model" "${variant_args[@]}" --format json "$prompt" </dev/null >"$events_file" 2>"$stderr_file" || status=$?
 else
+  prompt="$(cat "$prompt_file")"
   OPENCODE_DISABLE_PROJECT_CONFIG=1 opencode run --agent build --model "$model" "${variant_args[@]}" --format json "$prompt" </dev/null >"$events_file" 2>"$stderr_file" || status=$?
 fi
 printf '\nExecutor CLI exit: %s. Report: %s\n' "$status" "$report"
@@ -210,6 +224,7 @@ if [[ "$mode" != routed ]]; then run_once; exit $?; fi
 
 # Separate workspace ownership prevents concurrent writers to the canonical plan/report.
 # Unsettled/interrupted starts retain both the lock and budget reservation for triage.
+node "$script_dir/route-plan.mjs" runtime-check "$repo_root" "$cli_version" || fail 75 'Installed CLI differs from catalog; no automatic refresh'
 node "$script_dir/route-plan.mjs" workspace-lock "$repo_root" || fail 75 'Workspace unavailable'
 managed_settled=true
 managed_cleanup() {

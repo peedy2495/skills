@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, lstatSync, readlinkSync, realpathSync, readdirSync, writeSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -9,15 +9,21 @@ import { checkBudget, readState, transaction, atomicJSON } from './budget.mjs';
 import { collectUsage } from './collect-usage.mjs';
 import { globalCatalogDirectory } from './catalog-store.mjs';
 import { withCredits, readCredits } from './credits.mjs';
+import { runtimeVersion, executionOverlay } from './opencode-runtime.mjs';
 
-export function contextHash(root, scope = 'project') {
-  const sources = [];
+export function contextHash(root, scope = 'project', version = '1.18.31') {
+  const sources = [], visited = new Set(), v2 = runtimeVersion(version).major === 2;
   function scan(path) {
     // Publishing revisions must not invalidate its own source fingerprint.
     if (resolve(path) === resolve(globalCatalogDirectory())) return;
     if (!existsSync(path)) return;
     const s = lstatSync(path);
-    if (s.isSymbolicLink()) { sources.push([path, readlinkSync(path)]); return; }
+    if (s.isSymbolicLink()) {
+      sources.push([path, readlinkSync(path)]);
+      if (v2) scan(realpathSync(path));
+      return;
+    }
+    if (v2) { if (visited.has(path)) return; visited.add(path); }
     if (s.isDirectory()) {
       for (const n of readdirSync(path).sort()) if (!['node_modules', '.git', 'cache'].includes(n)) scan(join(path, n));
     } else if (s.isFile()) sources.push([path, digest(readFileSync(path))]);
@@ -41,6 +47,20 @@ export function contextHash(root, scope = 'project') {
     inputs.scope = 'global-v2';
     inputs.environment = Object.entries(process.env).filter(([k]) =>
       (k.startsWith('OPENCODE_') && !['OPENCODE_DISABLE_MODELS_FETCH', 'OPENCODE_DISABLE_PROJECT_CONFIG'].includes(k)) || /(?:API_KEY|AUTH_TOKEN|ACCESS_TOKEN|SECRET_ACCESS_KEY)$/.test(k)).sort(([a], [b]) => a.localeCompare(b));
+  }
+  if (v2) {
+    // V2 can discover agent definitions from .agents/.claude and configuration
+    // from ancestors. Ignore project plans, budgets, skill text and usage state.
+    for (const homeRoot of [join(homedir(), '.agents'), join(homedir(), '.claude')]) {
+      for (const name of ['agent', 'agents', 'mode', 'modes']) scan(join(homeRoot, name));
+    }
+    for (let current = resolve(root); ; current = dirname(current)) {
+      for (const name of ['opencode.json', 'opencode.jsonc', '.opencode']) scan(join(current, name));
+      for (const directory of ['.agents', '.claude']) for (const name of ['agent', 'agents', 'mode', 'modes']) scan(join(current, directory, name));
+      if (dirname(current) === current) break;
+    }
+    inputs.sources = [...new Map(sources.map(item => [item[0], item])).values()].sort((a, b) => a[0].localeCompare(b[0]));
+    inputs.execution_adapter = 'v2.2.2-native-standalone-stdin-1';
   }
   return digest(inputs);
 }
@@ -102,7 +122,7 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
 }
 function load(root) {
   const cfg = configuration(root);
-  assert(contextHash(root, cfg.catalog_scope) === cfg.c.source.context_hash, 'OpenCode configuration incompatible with catalog fingerprint; no automatic refresh');
+  assert(contextHash(root, cfg.catalog_scope, cfg.c.source.cli_version) === cfg.c.source.context_hash, 'OpenCode configuration incompatible with catalog fingerprint; no automatic refresh');
   return cfg;
 }
 async function withFundingWait(root, cfg, runId, operation, timing = {}) {
@@ -221,15 +241,7 @@ export async function finish(root, id, exit) {
     return outcome;
   }));
 }
-function overlay(model) {
-  const config = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
-  config.small_model = model;
-  config.compaction = { ...config.compaction, auto: false };
-  config.agent ??= {};
-  config.agent.build = { ...config.agent.build, permission: { ...config.agent.build?.permission, task: 'deny' } };
-  for (const name of ['title', 'summary', 'compaction']) config.agent[name] = { ...config.agent[name], disable: true };
-  return JSON.stringify(config);
-}
+
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])) {
   try {
     const [command, rootArg, value, previous] = process.argv.slice(2), root = realpathSync(rootArg);
@@ -251,7 +263,8 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
       mkdirSync(directory, { recursive: true, mode: 0o700 });
       writeFileSync(join(directory, 'decision.json'), JSON.stringify(d) + '\n', { flag: 'wx', mode: 0o400 });
       console.log([d.run_id, d.model, d.variant ?? ''].join('\n'));
-    } else if (command === 'claim') { const d = await claim(root, value); process.stdout.write(overlay(d.model)); }
+    } else if (command === 'runtime-check') { assert(runtimeVersion(load(root).c.source.cli_version).version === runtimeVersion(value).version, 'Installed CLI differs from catalog version; no automatic refresh'); }
+    else if (command === 'claim') { const cfg = load(root); const prepared = executionOverlay(cfg.c.source.cli_version, '', JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}')); const d = await claim(root, value); if (runtimeVersion(cfg.c.source.cli_version).major === 1) prepared.small_model = d.model; process.stdout.write(JSON.stringify(prepared)); }
     else if (command === 'finish') { const outcome = await finish(root, value, Number(previous)); console.log(outcome.fallback_safe ? 'safe-technical-free-failure' : 'no-fallback'); }
     else throw Error('Unknown router operation');
   } catch (e) { console.error(`Router: ${e.safe ? e.message : 'invalid configuration or local state; inspect privately'}`); process.exitCode = 75; }

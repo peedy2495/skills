@@ -20,6 +20,7 @@ bash_bin="$(command -v bash)"
 cat > "$fixture/bin/opencode" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == --version ]]; then printf '%s\n' "${EXECUTOR_TEST_CLI_VERSION:-1.18.31}"; exit 0; fi
 [[ "${TMPDIR:-}" == "$PWD/artifacts/opencode/tmp" && -d "$TMPDIR" ]] || exit 98
 printf '%s\0' "$PWD" "${OPENCODE_DISABLE_PROJECT_CONFIG:-}" "$@" >> "$EXECUTOR_TEST_CAPTURE"
 case "${EXECUTOR_TEST_REPORT:-SUCCESS}" in
