@@ -1,7 +1,7 @@
-# Skill library maintenance
+# Cost-efficiency workflow maintenance
 
-For new/repairing consumer integration, read [README.md](README.md), “Connect a project”: the SSOT for links, profiles and preflight. Skip setup guidance otherwise.
+This repository has one purpose: token-efficient, economical execution of prompts. [SKILL.md](SKILL.md) is the single consumer entrypoint. For extending/maintaining this project use [skill-maintenance](skills/skill-maintenance/SKILL.md), including its mandatory final whole-context efficiency pass. Only context selection/reuse, model routing, execution budgets, quotas, transport and their maintenance belong here. Product features, language/toolchain conventions, architecture/UI/testing skills and general skill installers/creators belong to consumers when needed; never import them here or author Home copies.
 
-Keep reusable guidance application-, language- and model-independent; product rules/commands stay in consumers. Minimize context through Progressive Disclosure, SSOT and precise routing. Anchors never replace explicit safety/authorization contracts.
+For new/repairing integration read [README.md](README.md), “Connect a project”; skip setup otherwise. Fresh clones must work: no repository symlinks, private paths or external source dependencies. Generate relative discovery links only inside consumers. Never copy credentials/application data into this library.
 
-Maintain this workflow directly; preserve existing work. Script tests use isolated fake CLIs, never real model calls. Validate with `bash scripts/check.sh`. Document model-behavior uncertainty; word counts prove neither token nor quality equivalence. Never copy credentials/application data into this library.
+Maintain directly; preserve existing work. Before delivery inspect the affected routing/handoff path for semantic compression, Progressive Disclosure, source/scope-aware cache invalidation and deduplication per [context policy](references/context.md). Explicit safety/authorization contracts survive compression. Validate with `bash scripts/check.sh`; isolated fake CLIs only, never real model calls. Word counts prove neither token savings nor behavioral equivalence; report material uncertainty.

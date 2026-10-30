@@ -30,13 +30,12 @@ while (($#)); do
   esac
 done
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly implementation_rules="$script_dir/../references/implementation-rules.md"
 readonly execution_contract="$script_dir/../references/execution-contract.md"
 readonly report_template="$script_dir/../references/implementation-report-template.md"
 command -v git >/dev/null 2>&1 || fail 69 'git is not available on PATH'
 repo_root="$(git -C "${project:-$PWD}" rev-parse --show-toplevel 2>/dev/null)" || fail 66 'Select a consuming Git project with --project or cwd'
 cd -- "$repo_root"
-for required in "$plan" "$report_template" "$implementation_rules" "$execution_contract"; do
+for required in "$plan" "$report_template" "$execution_contract"; do
   [[ -f "$required" && -r "$required" && -s "$required" ]] || fail 66 "Missing, empty or unreadable $required"
 done
 command -v opencode >/dev/null 2>&1 || fail 69 'opencode is not available on PATH; no implementation fallback will run'
@@ -147,24 +146,31 @@ cleanup() {
 }
 trap cleanup EXIT
 cat "$execution_contract" > "$prompt_file"
-cat "$implementation_rules" >> "$prompt_file"
 printf '\n# Implementation report format\n' >> "$prompt_file"
 cat "$report_template" >> "$prompt_file"
-printf '\n# Consuming-project constraints\n' >> "$prompt_file"
-for instruction in "${project_instructions[@]}"; do
+# Identity, not wording, determines duplicates. Keep distinct consumer files even
+# when their text happens to match; aliases across either group are emitted once.
+included_instructions=("$execution_contract" "$report_template")
+append_instruction() {
+  local instruction="$1" included
+  for included in "${included_instructions[@]}"; do
+    if [[ "$instruction" -ef "$included" ]]; then return 0; fi
+  done
+  included_instructions+=("$instruction")
   printf '\n## Instruction: %s\n' "$instruction" >> "$prompt_file"
   cat "$instruction" >> "$prompt_file"
   printf '\n' >> "$prompt_file"
+}
+printf '\n# Consuming-project constraints\n' >> "$prompt_file"
+for instruction in "${project_instructions[@]}"; do
+  append_instruction "$instruction"
 done
 printf '\n# Task instructions\n' >> "$prompt_file"
 if ((${#relevant_instructions[@]} == 0)); then
   printf '%s\n' 'No additional task skill/reference was supplied.' >> "$prompt_file"
 else
   for instruction in "${relevant_instructions[@]}"; do
-    if [[ "$instruction" -ef "$execution_contract" || "$instruction" -ef "$implementation_rules" || "$instruction" -ef "$report_template" ]]; then continue; fi
-    printf '\n## Instruction: %s\n' "$instruction" >> "$prompt_file"
-    cat "$instruction" >> "$prompt_file"
-    printf '\n' >> "$prompt_file"
+    append_instruction "$instruction"
   done
 fi
 printf '\n# Task plan\n' >> "$prompt_file"

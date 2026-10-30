@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { integer, digest } from './routing-schema.mjs';
+import { runtimeVersion } from './opencode-runtime.mjs';
 
 // A versioned, deliberately narrow adapter. Text/stderr are never error classifiers.
 export function collectUsage(file, entry, cliVersion) {
@@ -7,7 +8,8 @@ export function collectUsage(file, entry, cliVersion) {
   let events = [], complete = raw.endsWith('\n');
   try { events = raw.split('\n').filter(s => s.trim()).map(s => JSON.parse(s)); }
   catch { complete = false; }
-  const v2 = /^(?:opencode v)?2\.2\.2$/.test(cliVersion);
+  let v2 = false;
+  try { v2 = runtimeVersion(cliVersion).major === 2; } catch { /* unsupported telemetry stays unknown */ }
   const supported = cliVersion === '1.18.31' || v2;
   const sessions = new Set(events.map(e => e.sessionID));
   let valid = complete && supported && (!v2 || (sessions.size === 1 && typeof events[0]?.sessionID === 'string' && events[0].sessionID.length > 0));

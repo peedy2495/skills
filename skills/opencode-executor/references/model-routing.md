@@ -26,7 +26,7 @@ Budgets are separate: [routing-budget.md](routing-budget.md). Optional shared `"
 
 ## Explicit catalog update only
 
-Only explicit user requests authorize discovery/reassessment: follow [catalog-update.md](catalog-update.md) and [catalog-assessments.md](catalog-assessments.md). Missing data/startup/timers/failure/exhaustion never authorize updates. Normal routing reads stored JSON only.
+[catalog-update.md](catalog-update.md) owns discovery authorization, including explicit first connection, metadata-only capture and curated updates. Load [catalog-assessments.md](catalog-assessments.md) only for quality/publication assessments. Normal routing reads stored JSON only.
 
 ## Atomic admission, execution and audit
 

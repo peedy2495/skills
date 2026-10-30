@@ -4,7 +4,7 @@ Ready: exact observable end state in a few sentences.
 
 # Relevant Instructions
 
-Only necessary task-specific skills/references, exact paths. Stable/minimal list; executor sorts paths for a reusable prompt prefix. Use `none` if plan supplies all constraints.
+Only necessary consumer-owned skills/references, exact paths. Stable/minimal list; executor sorts paths for a reusable prompt prefix. Use `none` if plan supplies all constraints. No domain skills supplied by the shared efficiency workflow.
 
 - `.agents/skills/.../SKILL.md`
 
@@ -15,6 +15,7 @@ Project-wide Markdown rules come from profile; do not repeat them here. Record a
 - Relevant files/symbols/current behavior.
 - Preserve dirty/staged/untracked user work, if any.
 - Material constraints, risks, baseline failures.
+- Authorized external/Git actions and scope, or `none`; never infer commit/push/deployment.
 
 Task-local only; no unrelated product requirements.
 
@@ -23,7 +24,7 @@ Task-local only; no unrelated product requirements.
 - [ ] `path/to/file`: concrete change and intended behavior.
 - [ ] `path/to/file`: concrete change and intended behavior.
 
-Specify interfaces/types/state/persistence only when constraining implementation. Local details without architecture/public-contract impact may be left to executor.
+Actions and methods come from this project's goal/rules, never shared implementation defaults.
 
 # Milestones
 
@@ -51,12 +52,3 @@ Check completed steps immediately. Record concise verification/next unfinished a
 # Out of Scope
 
 Only important boundaries otherwise mistaken for task scope.
-
-# Optional Architecture Detail
-
-Include only for cross-cutting architecture, persistence/migration, security/concurrency boundaries or materially different implementation choices.
-
-- Required interfaces/contracts/ownership.
-- Data/control flow; lifecycle/cancellation.
-- Error/rollback/persistence behavior.
-- Chosen design/materially rejected alternatives.

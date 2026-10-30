@@ -1,60 +1,50 @@
-# Coding skills
+# Cost-efficient prompts
 
-Shared, application-independent coding guidance. Token economy: precise routing, semantic anchors with explicit contracts, one autonomous executor run, event/delta supervision, one focused quality check. No mandated language/framework/UI/provider/model.
-
-## Skills
-
-- `skills/opencode-executor`: substantial implementation/authorized delivery; trivial changes/workflow maintenance stay direct. Testing/UI/architecture references load only when relevant.
-- `skills/skill-maintenance`: explicit skill/workflow changes, not ordinary features.
-
-Product behavior, languages/versions, CI commands and credentials stay in consumers. Reuse project tools. Runner requires Bash/Git/Node.js 18+/OpenCode, without constraining product languages. Library tests need no OpenCode service/network/credentials.
+One reusable [skill](SKILL.md) for economical prompt execution: minimal relevant context, semantic compression, Progressive Disclosure, scoped context reuse, deduplication, model routing, budgets and quota checks. The executor transports the consumer's task and rules. Product behavior, specialist skills, architecture, language/toolchain and check commands stay in that project.
 
 ## Connect a project
 
-Keep checkout beside consuming repositories. From consumer Git root, only if destination is absent:
+Clone this repository beside the consumer, then run from the consumer Git root:
 
 ```sh
-mkdir -p .agents/skills
-ln -s ../../../skills/skills/opencode-executor .agents/skills/opencode-executor
+node ../skills/scripts/connect-project.mjs
 ```
 
-Target is relative to `.agents/skills/`; adapt to layout. Review/back up local changes before replacing an existing skill. Relative symlink preserves one source; checkout/filesystem must support symlinks and tools must have read permission. No permission bypass/implicit download. For portable, reproducible CI, provision shared checkout at agreed revision; missing links fail clearly. Ordinary app builds need not load skills.
+Creates only relative consumer links: `./skills -> ../skills` and `.agents/skills/cost-efficient-prompts -> ../../skills`. Existing project files, instructions, profiles and project-owned skills are preserved; conflicts stop setup. Reconnection removes only old discovery aliases with the former library-link format. No Home skill installation, imported catalogue or private source checkout is needed. The library itself contains no symlinks.
 
-Create secret-free `.agents/executor.json`:
+Manual loading: create the absent root link with `ln -s ../skills skills` and add `For economical prompt execution, read skills/SKILL.md; project rules remain authoritative.` to consumer AGENTS.md. A root link alone does not guarantee host discovery; the helper supplies that separately. The selected skill can complete first setup with `node skills/scripts/connect-project.mjs`. Elsewhere use `--project /path/to/consumer`.
+
+**Explicit first connection authorizes metadata-only OpenCode catalog capture**, even if another project initialized the global catalog. Success writes consumer-local `.agents/skills-setup.json`; failure leaves retryable links. Later connections skip capture. No inference, quality guesses, model approval or spending authorization; new combinations remain unassessed. This updates routing metadata, not OpenCode itself/cache. [Catalog maintenance](skills/opencode-executor/references/catalog-update.md) owns further explicit updates; missing/stale data never authorizes refresh.
+
+The helper appends ignores for `/skills`, `/artifacts/opencode/`, `/.agents/skills-setup.json`. Generated links derive from the actual checkout; cloning/moving the sibling layout keeps them portable. CI provisions its own runtime state. Runner dependencies: Bash, Git, Node.js 18+ and supported OpenCode; account adapters document optional tools. No credentials/account state are distributed.
+
+## Delegate only when economical
+
+Direct work needs no executor profile. For delegation create secret-free consumer `.agents/executor.json`:
 
 ```json
 {"model":"your-provider/your-model","effort":"medium","instructions":["AGENTS.md"]}
 ```
 
-List exact existing consumer Markdown constraints. Supervisor resolves applicable nested/ancestor rules and explicitly includes them in local instructions/plan. Unknown fields/traversal/external symlinks/invalid profiles fail closed. Explicit `instructions` list is required even with CLI model selection; empty only if plan supplies all project constraints. `--model` selects a model without provider fallback; host/user authorization governs changes, never inferred from a string. Use normal credential mechanisms, never profile secrets.
+List exact existing consumer Markdown constraints; resolve applicable ancestor/nested rules explicitly through project-owned files. Empty instructions only when the plan supplies all constraints. Domain skills live under consumer `.agents/skills/`; this library never creates them. Invalid fields/traversal/external profile links fail closed. Model/effort choices stay local; names grant no approval.
 
-Add one consumer AGENTS.md routing line: `.agents/skills/opencode-executor/SKILL.md` for substantial delegated coding/delivery; trivial/workflow changes direct. Keep product invariants/test/build commands there; no generic-rule duplication.
-
-Create Ready `.agents/PLAN.md` from shared template. Relevant Instructions: exact project-visible paths, e.g. `.agents/skills/opencode-executor/references/testing.md`; `ui.md` only for UI. Runner injects core contracts/profile instructions. Report: consumer `.agents/IMPLEMENTATION_REPORT.md`.
+Create Ready `.agents/PLAN.md` from the [task template](skills/opencode-executor/references/plan-template.md), then:
 
 ```sh
-bash .agents/skills/opencode-executor/scripts/execute-plan.sh --check
-bash .agents/skills/opencode-executor/scripts/execute-plan.sh
+bash skills/skills/opencode-executor/scripts/execute-plan.sh --check
+bash skills/skills/opencode-executor/scripts/execute-plan.sh
 ```
 
-Elsewhere add `--project /path/to/consumer`. Legacy CLI model/effort overrides profile; `xhigh` also requires explicit authorization/`--allow-xhigh`. Ignore consumer `artifacts/opencode/`; logs/temp files stay there. Stable instructions precede task data; never inject supervisor transcript/catalog. Report schema/recovery/nonzero CLI failures are validated; legacy never retries/falls back.
+`--check` is read-only without inference. xhigh requires explicit authorization and `--allow-xhigh`. Stable selected constraints are injected once before changing task data. Current report: `.agents/IMPLEMENTATION_REPORT.md`; scratch/logs: consumer `artifacts/opencode/`. Preserve accounting/audit state. Enabled routing alone owns one verified safe technical fallback; never retry work with unknown effects.
 
-OpenCode 2.2.2 uses native standalone server/events/wait, stdin handoff and `model#variant`; V1 invocation remains compatible. Unsupported V2 releases block until verified. `--check` validates local prerequisites only. Migration/configuration/ambient-context limits: [runtime adapters](skills/opencode-executor/references/opencode-v2.md). Runtime migration never updates a catalog; incompatible catalog fingerprints block routed starts.
-
-Opt-in [deterministic routing](skills/opencode-executor/references/model-routing.md): global installation catalog holds general model/variant metadata; approvals/strategy/budgets/usage stay project-local. Legacy catalogs remain supported; disabled routing preserves consumers. Codex supplies [task features](skills/opencode-executor/references/routing-task.md); runner chooses exact model/variant and atomically admits starts. Qualified Free precedes default_go; one budgeted Go restart requires proven safe technical Free failure. Normal routing never discovers/updates models; explicit updates use installed CLI candidates/variants/prices and cited publications for assessments. Fingerprint incompatibility blocks, never refreshes. Preserve persistent budget/audit state separately from temporary logs.
-
-Optional shared [billing/Go-volume pool](skills/opencode-executor/references/credits.md): embed same checkout at `./skills`; ignore `/skills/` in consumer `.gitignore`. Fresh destination: `ln -s /path/to/shared/skills skills`; `.agents/skills/` skill link then targets `../../skills/skills/opencode-executor`. Consumer policy: `"credits":"skills/credits.json"`. Ignore checkout-local `credits.json`, `.env`, `credits.json.lock/`; templates contain no credentials. Independent clones do not share accounting. Shared file holds account telemetry/minimal reservations; approvals/task features/budgets/detailed logs stay local.
-
-## Language and interface routing
-
-Python service: Python toolchain; Rust CLI: Rust toolchain; mixed-language changes: affected boundaries. UI reference only for web/desktop/mobile/terminal interfaces; headless skips it. No automatic libraries/browser suite/TDD skill cascade/full technology scan. Required native gates remain authoritative.
+Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared OpenCode credits](skills/opencode-executor/references/credits.md). Keep checkout-local `credits.json`, `.env`, locks and `.quota-prompt.json` ignored. Independent clones share neither reservations nor daily reminders. Account checks never replace fresh admission.
 
 ## Validate changes
+
+Extending/maintaining this workflow uses the repository-only [maintenance skill](skills/skill-maintenance/SKILL.md). It requires a final whole-context pass for intelligent routing, lossless semantic compression, Progressive Disclosure, context-sensitive caching and consistent deduplication. It is not added to consumer discovery.
 
 ```sh
 bash scripts/check.sh
 ```
 
-Isolated external consumers/linked skills/fake V1/V2 CLIs test selected instructions, exact variants, private-server invocation, usage/fallback/budget isolation, metadata adapters and report recovery. Word/byte reductions prove no model quality. Behavioral-equivalence claims require representative implementation/bugfix/delivery tasks, identical model/budget, objective acceptance checks. Library validation authorizes no paid A/B calls.
-
-Semantic anchors name methods; explicit contracts carry constraints. Sources: [Semantic Anchors](https://llm-coding.github.io/Semantic-Anchors/), [Semantic Contracts](https://llm-coding.github.io/Semantic-Anchors/contracts/). The library never installs/sends their full catalog to agents.
+Isolated fake CLIs cover a fresh Git clone elsewhere, relative consumer links, first setup, instruction deduplication/cache invalidation, exact variants, budgets, usage and failure recovery. No real inference/network/credentials. Word/byte reductions prove neither token savings nor quality equivalence; measurements and representative acceptance tasks are required for such claims. No paid evaluation implied.

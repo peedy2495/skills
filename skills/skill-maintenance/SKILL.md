@@ -1,18 +1,20 @@
 ---
 name: skill-maintenance
-description: Maintain shared/project-local coding skills, routing and execution contracts on explicit request. Exclude task history and application behavior from reusable guidance.
+description: Extend or maintain this cost-efficiency skill project and validate its complete routing/context path. Exclude product work, consumer domain skills and general skill installation.
 ---
 
-# Skill maintenance
+# Maintain the efficiency workflow
 
-Apply only to explicit instruction/workflow maintenance, never incidental feature work. Work directly; consult the executor skill only for interfaces when changing its workflow.
+Work directly in this checkout; preserve existing work. This project owns only economical prompt execution and its maintenance. Product-specific behavior, methods and skills belong to their consumer. No Home copies, imported skill catalogues, private paths or repository symlinks.
 
-Progressive Disclosure: precise metadata, small entrypoint, only materially relevant references. No load-all rules/catalogs. Separate skills require recurring distinct work, not a language or transient feature.
+Inspect affected entrypoints, callers, references, templates/scripts and actual handoffs. Load adjacent skills only for concrete overlap. Keep one normative source per rule; deterministic work uses existing helpers. Consumer discovery exposes only the efficiency entrypoint, never this maintenance workflow.
 
-SSOT/DRY: one normative source per rule; shared runner, no copied scripts. Consumer profiles/instructions own application behavior, toolchain commands, model choices and user language. Current implementation/tests establish behavior; consult history only for concrete uncertainty. No appended context diaries/snapshots as active guidance.
+Before completing every skill change, inspect the whole context using these checks and the shared [context policy](../../references/context.md):
 
-For shared/project-local skills, prefer established semantic anchors only when shorter, unambiguous and behavior-preserving. Keep project rules, safety/authorization boundaries, verifiable requirements, events, paths and machine schemas explicit. Remove/narrow overlaps first. KISS/YAGNI never discards safeguards. Definition of Done governs completion; Hemingway Bridge preserves resumable state; BLUF structures reports. Briefly explain ambiguous anchors; neither inject external catalogs nor assume identical model interpretations.
+- **Intelligent routing:** smallest applicable skill/context set; explicit triggers and boundaries; no accidental administration or specialist cascades.
+- **Lossless semantic compression:** preserve meaning, goals, priorities, conditions, exceptions, dependencies, units, scope, contracts, authorization and acceptance. Remove redundancy, not requirements. Keep explicit wording where equivalence is uncertain; anchors never replace safety contracts.
+- **Progressive Disclosure:** concise metadata/entrypoints; conditional detail behind precise references, without hiding mandatory constraints.
+- **Context-sensitive caching:** reuse only with matching source/revision/role and consumer/evidence scope; invalidate changed or lost context. Live gates remain fresh; provider cache hits are never assumed.
+- **Consistent deduplication:** one canonical owner; inspect aliases, wrappers, templates and selected handoff payloads. Distinct constraint scopes remain intact.
 
-Place stable prompt content before dynamic data, deterministically sorted. Never load irrelevant text for cache hits: fewer calls/less context take priority. Host communication/tool requirements still apply.
-
-Validate script behavior with isolated fakes, not real paid calls by default: consumer compatibility, exact instruction delivery, failure/status semantics and scope. Word/byte counts do not measure quality. Quality claims require representative tasks on the selected model, identical budgets and objective acceptance checks; shorter prompts do not prove equivalence. Update docs for material setup/contract changes, not every edit.
+Revalidate resulting routing, selected/excluded payloads, stable prefixes and invalidation with existing isolated fake CLIs and `bash scripts/check.sh`. Report checks and material model-behavior uncertainty. Word counts prove neither token savings nor lossless behavior across models; no paid evaluation implied.

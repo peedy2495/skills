@@ -9,7 +9,7 @@ export function runtimeVersion(value) {
   const match = /^(?:opencode v)?(\d+\.\d+\.\d+)$/.exec(value.trim());
   assert(match && ['1', '2'].includes(match[1].split('.')[0]), 'Unsupported OpenCode version; inspect compatibility before execution');
   const major = Number(match[1].split('.')[0]);
-  assert(major !== 2 || match[1] === '2.2.2', 'OpenCode V2 release not validated; update the version adapter explicitly');
+  assert(major !== 2 || ['2.2.2', '2.2.3'].includes(match[1]), 'OpenCode V2 release not validated; update the version adapter explicitly');
   return { version: match[1], major };
 }
 export function probeRuntime() {

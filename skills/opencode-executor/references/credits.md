@@ -8,7 +8,7 @@ Ignored shared-root `credits.json`/`.env`; adapter requires `OPENCODE_GO_API_KEY
 
 Initial setup: copy [credits.example.json](../../../credits.example.json)/[.env.example](../../../.env.example) only if local files are absent. Set key locally; restrict both files to owner. Configure account limits/evidence before enabling checks. Committed example enables neither, authorizes no spending.
 
-Consumer `.agents/routing-policy.json`: `"credits":"skills/credits.json"` for `./skills` embedding; this repository: `"credits":"credits.json"`. All consumers must resolve the **same canonical file**; clones/copies share no reservations. Embedding/ignores: [README.md](../../../README.md), “Connect a project”.
+Consumer `.agents/routing-policy.json`: `"credits":"skills/credits.json"` for `./skills` embedding. All consumers must resolve the **same canonical file**; clones/copies share no reservations. Embedding/ignores: [README.md](../../../README.md), “Connect a project”.
 
 `credits.json`: readable two-space JSON, config plus compact persistent `state`, atomically replaced; never edit during managed runs. Schema/API adapter: [credits.mjs](../scripts/credits.mjs). Retain normalized telemetry even on denied starts. Optional `state.last_error`: fixed code/timestamp only; previous successful snapshot stays dated, never becomes invented zero.
 

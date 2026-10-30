@@ -1,6 +1,11 @@
 # Explicit catalog update
 
-Read only for user-requested catalog updates; [model-routing.md](model-routing.md) defines configuration scope. Never discover on missing data/startup/timer/failure/budget exhaustion. Follow [catalog-assessments.md](catalog-assessments.md) for publication enrichment/variant assessments and publish together. Codex researches only during requested maintenance; no extra evaluator/review call/runtime research. Collector/importer is deterministic: no browsing/rating generation. Metadata-only capture supports initial inventory/preparation/explicit metadata-only requests. Use actual installed shared path:
+Read for explicit catalog maintenance or first connection authorized by [README](../../../README.md); policy setup: [model routing](model-routing.md). Ordinary startup/missing data/timers/failure/exhaustion never authorize discovery. Choose one mode:
+
+- **Metadata-only:** initial inventory or explicit capture; skip assessment/research references. Collector is deterministic, without inference/browsing/ratings.
+- **Curated:** supplied/updated quality assessments; also read [assessment evidence/rubric](catalog-assessments.md). Research only during requested maintenance, never add evaluator/review calls.
+
+Use actual installed shared path:
 
 ```sh
 node /path/to/skills/opencode-executor/scripts/refresh-model-catalog.mjs --update --global
@@ -13,14 +18,14 @@ Curated import: `--update --global --assessments /path/to/assessments.json`, opt
 Legacy project interface, with imports confined to project:
 
 ```sh
-node .agents/skills/opencode-executor/scripts/refresh-model-catalog.mjs --update --project . --assessments .agents/model-assessments.json
+node skills/skills/opencode-executor/scripts/refresh-model-catalog.mjs --update --project . --assessments .agents/model-assessments.json
 ```
 
 Only installed/configured CLI supplies candidates/effective variants/prices. Probe `--version`; use its validated adapter. Disable project-config discovery as runner does and implicit model metadata fetching. Never `models --refresh`, external candidate APIs or inference; never unilaterally enable `--pure`. CLI metadata may depend on configured providers/plugins; external lists never add candidates.
 
 V1 (inspected 1.18.31): `models --verbose` yields resolved objects after built-in/custom variant merging/disabled removal; parse ID-plus-JSON structurally. `debug config`/`debug agent build` add context, not effective variants. Never guess a `debug v2` fallback.
 
-V2 2.2.2: `models --standalone` supplies IDs; `api --standalone model.list` supplies effective model records, complete `variants[]` (exact IDs/settings/headers/body), capabilities/limits and price tiers. `api --standalone provider.list`/`agent.list` bind effective providers/build agent; `debug config --standalone` lists configuration sources, not a merged V1 object. Validate API location against capture directory and inventory consistency. Hash sensitive metadata in memory only. Use local native CLI APIs, never contact model providers for entitlement/quality tests. Adapter/details: [opencode-v2.md](opencode-v2.md).
+V2 2.2.2/2.2.3: `models --standalone` supplies IDs; `api --standalone model.list` supplies effective model records, complete `variants[]` (exact IDs/settings/headers/body), capabilities/limits and price tiers. `api --standalone provider.list`/`agent.list` bind effective providers/build agent; `debug config --standalone` lists configuration sources, not a merged V1 object. Validate API location against capture directory and inventory consistency. Hash sensitive metadata in memory only. Use local native CLI APIs, never contact model providers for entitlement/quality tests. Adapter/details: [opencode-v2.md](opencode-v2.md).
 
 Missing/unreliable variants abort update, preserve prior catalog. `variant=null` is observed base configuration without explicit variant, including fingerprint-bound agent settings; never guessed strength/missing metadata. New runtime/configuration bindings invalidate prior curation unless explicitly reviewed; migration never silently republishes/promotes it.
 

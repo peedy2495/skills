@@ -60,7 +60,7 @@ export function contextHash(root, scope = 'project', version = '1.18.31') {
       if (dirname(current) === current) break;
     }
     inputs.sources = [...new Map(sources.map(item => [item[0], item])).values()].sort((a, b) => a[0].localeCompare(b[0]));
-    inputs.execution_adapter = 'v2.2.2-native-standalone-stdin-1';
+    inputs.execution_adapter = `v${runtimeVersion(version).version}-native-standalone-stdin-1`;
   }
   return digest(inputs);
 }

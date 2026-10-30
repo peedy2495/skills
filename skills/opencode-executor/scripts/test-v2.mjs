@@ -36,7 +36,7 @@ if(process.env.V2_TEST_RECOVERY){const text=${JSON.stringify(report)};const spli
 `,{mode:0o755});
 let serial=0;
 const json=(p,value)=>writeFileSync(p,JSON.stringify(value,null,2)+'\n');
-function fixture(routed=false){
+function fixture(routed=false,version='2.2.2'){
  const root=join(base,`consumer ${serial++}`);mkdirSync(join(root,'.agents/skills'),{recursive:true});
  symlinkSync(resolve(scripts,'..'),join(root,'.agents/skills/opencode-executor'));
  writeFileSync(join(root,'AGENTS.md'),'# Project\nPreserve fixture data.\n');
@@ -45,14 +45,14 @@ function fixture(routed=false){
  writeFileSync(join(root,'.agents/IMPLEMENTATION_REPORT.md'),'existing report\n');
  json(join(root,'.agents/executor.json'),{model:'fixture/go',effort:'high',instructions:['AGENTS.md']});
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('OPENCODE_')));
- env.PATH=bin+':'+process.env.PATH;env.XDG_CONFIG_HOME=join(base,'config');
+ env.PATH=bin+':'+process.env.PATH;env.XDG_CONFIG_HOME=join(base,'config');env.V2_TEST_VERSION='opencode v'+version;
  env.OPENCODE_CONFIG_CONTENT=JSON.stringify({permissions:[{action:'shell',resource:'*',effect:'ask'}],policies:[{action:'tool.use',resource:'shell:danger *',effect:'deny'}]});
  assert.equal(spawnSync('git',['init','-q',root],{env}).status,0);
  if(routed){
   const entry=(model,variant,billing)=>({model,variant,variant_hash:digest(variant),context:10000,output:1000,tool_use:true,billing,
    rates:Object.fromEntries(['input','output','cache_read','cache_write'].map(k=>[k,billing==='free'?0:1000000])),assessment:Object.fromEntries(axes.map(k=>[k,{score:3,basis:'observed',evidence:'Isolated fixture evidence'}])),evidence:'Fixture only',requires_xhigh:false,outcomes:[]});
-  const hash=spawnSync('node',['--input-type=module','-e',`import{contextHash}from ${JSON.stringify(new URL('./route-plan.mjs',import.meta.url).href)};import{writeSync}from'node:fs';writeSync(1,contextHash(process.argv[1],'project','2.2.2')+'\\n');`,root],{env,encoding:'utf8'});assert.equal(hash.status,0,hash.stderr);assert.match(hash.stdout.trim(),/^[a-f0-9]{64}$/);
-  json(join(root,'.agents/model-catalog.json'),{schema_version:1,revision:'v2-fixture',credit_unit:'microUSD',source:{kind:'opencode-cli',cli_version:'2.2.2',captured_at:'2026-10-30T00:00:00Z',context_hash:hash.stdout.trim(),metadata_hash:'fixture'},entries:[entry('fixture/free','careful','free'),entry('fixture/go',null,'go')]});
+  const hash=spawnSync('node',['--input-type=module','-e',`import{contextHash}from ${JSON.stringify(new URL('./route-plan.mjs',import.meta.url).href)};import{writeSync}from'node:fs';writeSync(1,contextHash(process.argv[1],'project',process.argv[2])+'\\n');`,root,version],{env,encoding:'utf8'});assert.equal(hash.status,0,hash.stderr);assert.match(hash.stdout.trim(),/^[a-f0-9]{64}$/);
+  json(join(root,'.agents/model-catalog.json'),{schema_version:1,revision:'v2-fixture',credit_unit:'microUSD',source:{kind:'opencode-cli',cli_version:version,captured_at:'2026-10-30T00:00:00Z',context_hash:hash.stdout.trim(),metadata_hash:'fixture'},entries:[entry('fixture/free','careful','free'),entry('fixture/go',null,'go')]});
   json(join(root,'.agents/routing-policy.json'),{schema_version:1,enabled:true,minimum_score:1,default_go:[{model:'fixture/go',variant:null}],specialists:[],allow_provisional:false,auto_fallback:true,reserve_multiplier:1});
   const cap={tokens:10000,credits:10000};json(join(root,'.agents/budget.json'),{schema_version:1,period:'fixture',credit_unit:'microUSD',enforcement:'estimated',project:cap,per_run:cap,phases:Object.fromEntries(['implementation','fallback','repair','validation','specialist'].map(k=>[k,cap])),reserves:{repair:{tokens:100,credits:100},validation:{tokens:100,credits:100}}});
   json(join(root,'.agents/executor-task.json'),{schema_version:1,task_id:'v2-fixture',operations:['implementation'],complexity:1,risk:1,validation:3,context_tokens:100,output_tokens:100,estimated_tokens:{input:20,output:20,cache_read:0,cache_write:0},phase:'implementation'});
@@ -61,8 +61,8 @@ function fixture(routed=false){
 }
 
 test('native runtime rejects unknown releases and preserves permissions while denying delegation/extra AI',()=>{
- assert.equal(runtimeVersion('opencode v2.2.2').major,2);assert.equal(runtimeVersion('1.18.31').major,1);
- for(const v of ['2.2.3','3.0.0','garbage'])assert.throws(()=>runtimeVersion(v));
+ assert.equal(runtimeVersion('opencode v2.2.2').major,2);assert.equal(runtimeVersion('opencode v2.2.3').major,2);assert.equal(runtimeVersion('1.18.31').major,1);
+ for(const v of ['2.2.4','3.0.0','garbage'])assert.throws(()=>runtimeVersion(v));
  const initial={warming:true,compaction:{auto:true,keep:{tokens:8000}},policies:[{action:'tool.use',resource:'shell:*',effect:'deny'}],agents:{build:{permissions:[{action:'edit',resource:'*',effect:'ask'}]}}};
  const c=executionOverlay('2.2.2','fixture/go',initial);
  assert.equal(initial.warming,true);assert.equal(c.warming,false);assert.equal(c.compaction.auto,false);assert.equal(c.compaction.keep.tokens,8000);
@@ -71,6 +71,15 @@ test('native runtime rejects unknown releases and preserves permissions while de
  for(const name of ['title','summary','compaction'])assert.equal(c.agents[name].disabled,true);
  assert.throws(()=>executionOverlay('2.2.2','fixture/go',{permission:{shell:'deny'}}),/Migrate legacy/);
  assert.throws(()=>executionOverlay('2.2.2','fixture/go',{agents:{build:[]}}),/Invalid V2 build agent/);
+});
+
+test('both supported V2 releases execute routed exact variants and safe fallback through the native adapter',()=>{
+ for(const version of ['2.2.2','2.2.3']){
+  const f=fixture(true,version),result=f.run([],{V2_TEST_FAILURE:'technical'});
+  assert.equal(result.status,0,result.stderr+result.stdout);
+  assert.deepEqual(f.calls().map(c=>[c.model,c.variant]),[['fixture/free','careful'],['fixture/go',null]]);
+  assert(f.calls().every(c=>c.args.includes('--standalone')&&c.overlay.warming===false&&c.config_disabled==='1'));
+ }
 });
 
 test('V2 executor uses native standalone/events, exact variant and stdin; preflight remains offline',()=>{

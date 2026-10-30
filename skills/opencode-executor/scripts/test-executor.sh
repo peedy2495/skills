@@ -128,10 +128,6 @@ mapfile -d '' -t invocation < "$EXECUTOR_TEST_CAPTURE"
 [[ "${invocation[11]}" == *'Never use hard-coded /tmp paths'* ]]
 [[ "${invocation[11]}" == *'Perform Git delivery only when the task plan records user authorization'* ]]
 [[ "${invocation[11]}" == *'Update .agents/PLAN.md immediately after each completed implementation step or check'* ]]
-while IFS= read -r rule; do
-  [[ "$rule" == '- '* ]] || continue
-  [[ "${invocation[11]}" == *"$rule"* ]] || { printf 'Missing injected rule: %s\n' "$rule" >&2; exit 1; }
-done < "$repo/.agents/skills/opencode-executor/references/implementation-rules.md"
 [[ "${invocation[11]}" == *'Keep fixture data intact.'* ]]
 [[ "${invocation[11]%%# Task plan*}" == *'Keep fixture data intact.'* ]]
 # Explicit configuration reaches the CLI unchanged; no copied runner needed.
@@ -139,9 +135,41 @@ done < "$repo/.agents/skills/opencode-executor/references/implementation-rules.m
 expect_exit 0 "$bash_bin" "$runner" --project "$repo" --model other/model --effort low
 mapfile -d '' -t custom < "$EXECUTOR_TEST_CAPTURE"
 [[ "${custom[6]}" == other/model && "${custom[8]}" == low ]]
-# A language/UI profile is local data, not a shared framework mandate.
+# Domain instructions are consumer data, never shared implementation defaults.
 cp "$repo/.agents/executor.json" "$fixture/base-profile"
 cp "$repo/.agents/PLAN.md" "$fixture/base-plan"
+# A selected file is sent once across profile/task aliases. Task-only edits keep
+# the stable prefix; changed selected constraints invalidate it immediately.
+ln -s SKILL.md "$repo/.agents/skills/testing/ALIAS.md"
+printf '%s\n' '{"model":"fixture/model","instructions":["AGENTS.md",".agents/skills/testing/SKILL.md"]}' > "$repo/.agents/executor.json"
+sed '/# Relevant Instructions/a\
+- `.agents/skills/testing/ALIAS.md`\
+- `.agents/skills/opencode-executor/references/execution-contract.md`' "$fixture/base-plan" > "$repo/.agents/PLAN.md"
+: > "$EXECUTOR_TEST_CAPTURE"
+expect_exit 0 "$bash_bin" "$runner" --project "$repo"
+mapfile -d '' -t deduplicated < "$EXECUTOR_TEST_CAPTURE"
+printf '%s' "${deduplicated[11]}" > "$fixture/handoff-before"
+node - "$fixture/handoff-before" "$repo/.agents/skills/opencode-executor/references/execution-contract.md" <<'NODE'
+const fs = require('node:fs'), assert = require('node:assert/strict');
+const prompt = fs.readFileSync(process.argv[2], 'utf8'), contract = fs.readFileSync(process.argv[3], 'utf8');
+assert.equal(prompt.split('Stable fixture instructions.').length - 1, 1, 'File aliases/profile overlap must not repeat instructions');
+assert.equal(prompt.split(contract).length - 1, 1, 'Execution safety contract must be present exactly once');
+NODE
+printf '\nAdditional task-local context.\n' >> "$repo/.agents/PLAN.md"
+: > "$EXECUTOR_TEST_CAPTURE"
+expect_exit 0 "$bash_bin" "$runner" --project "$repo"
+mapfile -d '' -t delta < "$EXECUTOR_TEST_CAPTURE"
+[[ "${deduplicated[11]%%# Task plan*}" == "${delta[11]%%# Task plan*}" ]]
+[[ "${deduplicated[11]}" != "${delta[11]}" ]]
+printf '\nChanged selected constraint.\n' >> "$repo/.agents/skills/testing/SKILL.md"
+: > "$EXECUTOR_TEST_CAPTURE"
+expect_exit 0 "$bash_bin" "$runner" --project "$repo"
+mapfile -d '' -t invalidated < "$EXECUTOR_TEST_CAPTURE"
+[[ "${deduplicated[11]%%# Task plan*}" != "${invalidated[11]%%# Task plan*}" ]]
+[[ "${invalidated[11]%%# Task plan*}" == *'Changed selected constraint.'* ]]
+printf '# Fixture testing skill\n\nStable fixture instructions.\n' > "$repo/.agents/skills/testing/SKILL.md"
+cp "$fixture/base-profile" "$repo/.agents/executor.json"
+cp "$fixture/base-plan" "$repo/.agents/PLAN.md"
 printf '# Python-only checks\nUse the existing Python gates; no UI.\n' > "$repo/python.md"
 printf '%s\n' '{"model":"fixture/python","instructions":["python.md","AGENTS.md","python.md"]}' > "$repo/.agents/executor.json"
 : > "$EXECUTOR_TEST_CAPTURE"
@@ -150,17 +178,20 @@ mapfile -d '' -t headless < "$EXECUTOR_TEST_CAPTURE"
 [[ "${headless[6]}" == fixture/python && "${headless[8]}" == medium ]]
 [[ "${headless[11]}" == *'Python-only checks'* && "${headless[11]}" != *'# Optional UI contract'* ]]
 [[ "${headless[11]%%# Task plan*}" == *'Python-only checks'* ]]
-# Shared references are routed explicitly and sorted, not load-all.
+# Project-owned references are selected explicitly and sorted, not load-all.
+mkdir -p "$repo/.agents/skills/project-ui"
+printf '# Consumer UI rules\nUse only this project interface contract.\n' > "$repo/.agents/skills/project-ui/SKILL.md"
+printf '# Consumer test rules\nUse only this project check commands.\n' > "$repo/.agents/skills/project-ui/checks.md"
 printf '# Mixed-language gates\nUse both affected toolchains.\n' > "$repo/mixed.md"
 printf '%s\n' '{"model":"fixture/mixed","effort":"low","instructions":["mixed.md","AGENTS.md"]}' > "$repo/.agents/executor.json"
 sed '/# Relevant Instructions/a\
-- `.agents/skills/opencode-executor/references/ui.md`\
-- `.agents/skills/opencode-executor/references/testing.md`' "$fixture/base-plan" > "$repo/.agents/PLAN.md"
+- `.agents/skills/project-ui/SKILL.md`\
+- `.agents/skills/project-ui/checks.md`' "$fixture/base-plan" > "$repo/.agents/PLAN.md"
 : > "$EXECUTOR_TEST_CAPTURE"
 expect_exit 0 "$bash_bin" "$runner" --project "$repo"
 mapfile -d '' -t mixed < "$EXECUTOR_TEST_CAPTURE"
-[[ "${mixed[6]}" == fixture/mixed && "${mixed[11]}" == *'# Optional UI contract'* && "${mixed[11]}" == *'Mixed-language gates'* ]]
-[[ "${mixed[11]%%# Optional UI contract*}" == *'# Testing contract'* ]]
+[[ "${mixed[6]}" == fixture/mixed && "${mixed[11]}" == *'# Consumer UI rules'* && "${mixed[11]}" == *'Mixed-language gates'* ]]
+[[ "${mixed[11]%%# Consumer test rules*}" == *'# Consumer UI rules'* ]]
 [[ "${mixed[11]}" != *'# Local contract: event-driven supervision'* ]]
 cp "$fixture/base-plan" "$repo/.agents/PLAN.md"
 # Invalid consumer configuration never calls the model or alters the last report.
@@ -290,4 +321,4 @@ previous_path="$PATH"
 export PATH="$fixture/no-cli"
 expect_exit 69 "$bash_bin" "$runner" --project "$repo" --check
 export PATH="$previous_path"
-printf '%s\n' 'PASS: shared symlink/cwd isolation, Python headless and mixed-language UI routing, required safe profiles, preflight reference checks, private stderr, focused canonical plan, project AGENTS discovery disabled, stable task instructions precede dynamic plan, arbitrary cwd/spaces, check-only preservation, configured model/effort forwarding, xhigh gate, current reports, SUCCESS/PARTIAL/BLOCKED, malformed reports, deviation/blocker triage, structured final-report recovery with authoritative-file preservation and CLI failure propagation without retries (mock only).'
+printf '%s\n' 'PASS: shared symlink/cwd isolation, Python headless and mixed-language UI routing, required safe profiles, preflight reference checks, private stderr, focused canonical plan, project AGENTS discovery disabled, instruction identity deduplication across groups/aliases, stable-prefix reuse and selected-context invalidation, arbitrary cwd/spaces, check-only preservation, configured model/effort forwarding, xhigh gate, current reports, SUCCESS/PARTIAL/BLOCKED, malformed reports, deviation/blocker triage, structured final-report recovery with authoritative-file preservation and CLI failure propagation without retries (mock only).'

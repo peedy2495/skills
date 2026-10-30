@@ -8,7 +8,7 @@ Prefer completion notifications/event-driven waits. Never tail logs/invoke AI me
 
 V2 runner uses native standalone event subscription/session wait/reconciliation; supervisor waits for the existing process, not a second API/AI loop. Session ID is diagnostic correlation, never permission to resume/replay. Runtime troubleshooting only: [opencode-v2.md](opencode-v2.md).
 
-Example: `phase=browser_tests state=completed tests=28 failed=0`. Raw logs local; bounded new failure excerpts only. Never reprocess full transcripts, unchanged files or known results; never expose secrets.
+Example: `phase=verification state=completed checks=3 failed=0`. Raw logs local; bounded new failure excerpts only. Reuse unchanged files/valid results per [context policy](../../../references/context.md); no full-transcript rereads, routine second review agent or secret exposure.
 
 Configured router owns safe technical Free-to-Go fallback, returning one final outcome/bounded audit. Codex neither selects models nor refreshes catalog. Unsafe/unknown/terminal failures need domain evaluation, never unchanged retry.
 
