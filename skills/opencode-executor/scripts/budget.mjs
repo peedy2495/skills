@@ -65,6 +65,9 @@ export function totals(s) {
 }
 export function checkBudget(s, b, reservation, phase, combination = null) {
   const usage = totals(s), protection = zero();
+  // No project allocation: the shared provider ledger alone admits capacity.
+  // This marker is constructed internally, never accepted from a budget file.
+  if (b.enforcement === 'provider-only') return { period: b.period, credit_unit: b.credit_unit, before: usage.all, phase, enforcement: 'provider-only' };
   for (const name of ['repair', 'validation']) {
     if (name === phase) continue;
     for (const k of ['tokens', 'credits']) protection[k] += Math.max(0, b.reserves[name][k] - (usage.phases[name]?.[k] ?? 0));

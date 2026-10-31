@@ -18,7 +18,7 @@ Numbers illustrate schema, not recommended budgets/measured tokens. Derive needs
 
 Use existing runner without `--model`/`--effort`. `--check`: eligibility/budget preview, no model discovery/ledger writes/inference. xhigh still requires user request in plan and `--allow-xhigh`.
 
-Runner alone owns the legacy no-fallback exception: one budgeted Free-to-default_go restart after verified technical rejection before any model step, unchanged workspace/report. Any step/tool/text, ambiguous error, unsafe state or insufficient budget returns to Codex for domain evaluation. No executor retry; report schema/focused final review unchanged.
+Runner alone owns the legacy no-fallback exception: one budgeted Free-to-funded restart after verified technical rejection before any model step, unchanged workspace/report. Any step/tool/text, ambiguous error, unsafe state or insufficient budget returns to Codex for domain evaluation. No executor retry; report schema/focused final review unchanged.
 
 Enabled `waiting_for_credits` keeps existing command/task pending until earliest relevant reset and successful fresh admission. Await per [supervision.md](supervision.md); never finish solely for waiting, invent IDs to bypass reservations or choose models.
 

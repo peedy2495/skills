@@ -13,6 +13,7 @@ import { collectUsage } from './collect-usage.mjs';
 const scripts=fileURLToPath(new URL('.',import.meta.url));
 const scratch=resolve(scripts,'../../../artifacts/opencode/tmp');mkdirSync(scratch,{recursive:true});
 const base=mkdtempSync(join(scratch,'v2-test.'));after(()=>rmSync(base,{recursive:true,force:true}));
+process.env.SKILLS_STATE_DIR=join(base,'isolated-shared-state');
 const bin=join(base,'bin');mkdirSync(bin);
 const report='# Status\n\nSUCCESS\n\n# Implemented\n\n- Fixture.\n\n# Changed Files\n\n- none\n\n# Verification\n\n- Native fixture passed.\n\n# Plan Deviations\n\n- none\n\n# Blockers\n\n- none\n';
 writeFileSync(join(bin,'opencode'),`#!/usr/bin/env node
@@ -34,6 +35,7 @@ emit({type:'step_start',part:{type:'step-start',id:'start',messageID:'msg_final'
 emit({type:'step_finish',part:{type:'step-finish',id:'finish',messageID:'msg_final',tokens:{input:10,output:5,reasoning:2,cache:{read:3,write:0}},cost:0}});
 if(process.env.V2_TEST_RECOVERY){const text=${JSON.stringify(report)};const split=text.indexOf('# Changed Files');for(const [i,t]of [text.slice(0,split),text.slice(split)].entries())emit({type:'text',part:{type:'text',id:'text'+i,messageID:'msg_final',sessionID:'ses_fixture',text:t}});}
 `,{mode:0o755});
+writeFileSync(join(bin,'codex'),'#!/bin/sh\nexit 99\n',{mode:0o755});
 let serial=0;
 const json=(p,value)=>writeFileSync(p,JSON.stringify(value,null,2)+'\n');
 function fixture(routed=false,version='2.2.2'){
@@ -80,6 +82,30 @@ test('both supported V2 releases execute routed exact variants and safe fallback
   assert.deepEqual(f.calls().map(c=>[c.model,c.variant]),[['fixture/free','careful'],['fixture/go',null]]);
   assert(f.calls().every(c=>c.args.includes('--standalone')&&c.overlay.warming===false&&c.config_disabled==='1'));
  }
+});
+
+test('V2 emergency defaults execute and settle unassessed approved models without a project model, policy or budget',()=>{
+ const f=fixture(true,'2.2.3'),shared=join(base,`global-state ${serial++}`),configHome=join(shared,'config');mkdirSync(shared);
+ json(join(f.root,'.agents/executor.json'),{instructions:['AGENTS.md']});
+ const c=JSON.parse(readFileSync(join(f.root,'.agents/model-catalog.json')));
+ c.schema_version=2;c.source.scope='global';c.unassessed=[];c.exclusions=[];
+ c.unassessed=c.entries.filter(e=>e.billing==='free');c.entries=[];
+ for(const e of c.unassessed){e.model='opencode/deepseek-fixture-free';for(const a of Object.values(e.assessment))Object.assign(a,{score:null,basis:'unknown'});}
+ for(const file of ['model-catalog.json','routing-policy.json','budget.json'])rmSync(join(f.root,'.agents',file));
+ const env={...f.env,SKILLS_STATE_DIR:shared,XDG_CONFIG_HOME:configHome};
+ const hash=spawnSync('node',['--input-type=module','-e',`import{contextHash}from ${JSON.stringify(new URL('./route-plan.mjs',import.meta.url).href)};import{writeSync}from'node:fs';writeSync(1,contextHash(process.argv[1],'global','2.2.3'));`,f.root],{env,encoding:'utf8'});
+ assert.equal(hash.status,0,hash.stderr);c.source.context_hash=hash.stdout.trim();
+ const directory=join(configHome,'opencode/model-routing');mkdirSync(directory,{recursive:true});json(join(directory,'catalog.json'),c);
+ const source=resolve(scripts,'../../..');
+ json(join(shared,'consumer.json'),JSON.parse(readFileSync(join(source,'consumer.example.json'))));
+ const pool=JSON.parse(readFileSync(join(source,'credits.example.json')));pool.volume.enabled=true;json(join(shared,'credits.json'),pool);
+ const result=f.run([],{SKILLS_STATE_DIR:shared,XDG_CONFIG_HOME:configHome});assert.equal(result.status,0,result.stderr+result.stdout);
+ assert.deepEqual(f.calls().map(x=>[x.model,x.variant]),[['opencode/deepseek-fixture-free','careful']]);
+ const state=JSON.parse(readFileSync(join(shared,'credits.json')));
+ assert.equal(state.state.codex.status,'unavailable');assert.equal(state.state.last_error.code,'usage_key');
+ assert.equal(Object.values(state.state.runs).length,1);assert(Object.values(state.state.runs).every(r=>r.state==='finished'&&r.usage_credits===0));
+ assert.equal(existsSync(join(f.root,'.agents/budget.json')),false);
+ assert.equal(existsSync(join(f.root,'artifacts/opencode/workspace.lock')),false);
 });
 
 test('V2 executor uses native standalone/events, exact variant and stdin; preflight remains offline',()=>{

@@ -49,6 +49,8 @@ export function cliBilling(model, metadata) {
   const simplePrice = cost && Object.keys(cost).every(k => ['input', 'output', 'cache', 'cache_read', 'cache_write'].includes(k));
   const zero = simplePrice && [cost.input, cost.output, cost.cache?.read ?? cost.cache_read, cost.cache?.write ?? cost.cache_write].every(n => n === 0);
   if (provider === 'opencode' && zero) return { billing: 'free', evidence: 'Local CLI opencode provider namespace and complete explicit zero input/output/cache rates identify a Free offering; remaining quota and other conditions are unverified.' };
+  if (provider === 'opencode' && simplePrice && [cost.input, cost.output, cost.cache?.read ?? cost.cache_read, cost.cache?.write ?? cost.cache_write].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0) && !zero)
+    return { billing: 'paid', evidence: 'Local CLI OpenCode Console namespace and complete positive token pricing identify pay-as-you-go; wallet availability is enforced separately.' };
   return { billing: 'unknown', evidence: 'CLI metadata does not establish a supported Free/Go classification.' };
 }
 export function buildCatalog(root, models, assessments, source, agent = {}, exclusions = []) {

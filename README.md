@@ -4,6 +4,15 @@ One reusable [skill](SKILL.md) for economical prompt execution: minimal relevant
 
 ## Connect a project
 
+First configure the installation once from this shared checkout:
+
+```sh
+node scripts/configure-consumer.mjs
+node scripts/provider-status.mjs --refresh
+```
+
+All projects then consume the same provider remainder and shared reservations. Ignored `consumer.json` supplies common routing defaults; [provider pool](references/provider-pool.md) owns scope, setup and limits. No project receives a separate credit allocation. DeepSeek, Muse and GLM are approved emergency families; missing quality scores or quota conversions alone never prevent their emergency starts. Unknown provider capacity remains unknown.
+
 Clone this repository beside the consumer, then run from the consumer Git root:
 
 ```sh
@@ -20,13 +29,13 @@ The helper appends ignores for `/skills`, `/artifacts/opencode/`, `/.agents/skil
 
 ## Delegate only when economical
 
-Direct work needs no executor profile. For delegation create secret-free consumer `.agents/executor.json`:
+Direct work needs no executor profile. For delegation create secret-free consumer `.agents/executor.json` containing only its applicable instruction paths:
 
 ```json
-{"model":"your-provider/your-model","effort":"medium","instructions":["AGENTS.md"]}
+{"instructions":["AGENTS.md"]}
 ```
 
-List exact existing consumer Markdown constraints; resolve applicable ancestor/nested rules explicitly through project-owned files. Empty instructions only when the plan supplies all constraints. Domain skills live under consumer `.agents/skills/`; this library never creates them. Invalid fields/traversal/external profile links fail closed. Model/effort choices stay local; names grant no approval.
+List exact existing consumer Markdown constraints; resolve applicable ancestor/nested rules explicitly through project-owned files. Empty instructions only when the plan supplies all constraints. Domain skills live under consumer `.agents/skills/`; this library never creates them. Invalid fields/traversal/external profile links fail closed. Shared routing selects assessed models, then the approved emergency pool, Free before funded within each pool. Paid Console emergency starts require a shared monetary cap; Go uses the existing subscription. Local restrictions cannot enlarge provider capacity. Existing manual profiles remain compatible without shared setup.
 
 Create Ready `.agents/PLAN.md` from the [task template](skills/opencode-executor/references/plan-template.md), then:
 
@@ -37,7 +46,7 @@ bash skills/skills/opencode-executor/scripts/execute-plan.sh
 
 `--check` is read-only without inference. xhigh requires explicit authorization and `--allow-xhigh`. Stable selected constraints are injected once before changing task data. Current report: `.agents/IMPLEMENTATION_REPORT.md`; scratch/logs: consumer `artifacts/opencode/`. Preserve accounting/audit state. Enabled routing alone owns one verified safe technical fallback; never retry work with unknown effects.
 
-Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared OpenCode credits](skills/opencode-executor/references/credits.md). Keep checkout-local `credits.json`, `.env`, locks and `.quota-prompt.json` ignored. Independent clones share neither reservations nor daily reminders. Account checks never replace fresh admission.
+Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared funding](skills/opencode-executor/references/credits.md). Keep installation-local `consumer.json`, `credits.json`, `.env` and locks ignored. Multiple checkouts must use the same `SKILLS_STATE_DIR` to coordinate reservations; copies create no shared capacity. Codex observations refresh automatically but this runner cannot reserve host-owned Codex turns. Account observations never replace fresh Go admission.
 
 ## Validate changes
 
@@ -47,4 +56,4 @@ Extending/maintaining this workflow uses the repository-only [maintenance skill]
 bash scripts/check.sh
 ```
 
-Isolated fake CLIs cover a fresh Git clone elsewhere, relative consumer links, first setup, instruction deduplication/cache invalidation, exact variants, budgets, usage and failure recovery. No real inference/network/credentials. Word/byte reductions prove neither token savings nor quality equivalence; measurements and representative acceptance tasks are required for such claims. No paid evaluation implied.
+Isolated fake CLIs/adapters cover a fresh Git clone elsewhere, relative consumer links, common defaults, concurrent cross-project reservations, fresh provider observations, instruction deduplication/cache invalidation, exact variants, budgets and recovery. No real inference/network/credentials. Word/byte reductions prove neither token savings nor quality equivalence; measurements and representative acceptance tasks are required for such claims. No paid evaluation implied.

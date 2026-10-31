@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "enabled": true,
+  "catalog": "global",
+  "selection": "qualified-free-then-go",
+  "minimum_score": 1,
+  "allow_provisional": false,
+  "auto_fallback": true,
+  "reserve_multiplier": 1.5,
+  "credits": "credits.json",
+  "refresh_codex": true,
+  "emergency_families": ["deepseek", "muse", "glm"]
+}

@@ -10,7 +10,7 @@ V2 runner uses native standalone event subscription/session wait/reconciliation;
 
 Example: `phase=verification state=completed checks=3 failed=0`. Raw logs local; bounded new failure excerpts only. Reuse unchanged files/valid results per [context policy](../../../references/context.md); no full-transcript rereads, routine second review agent or secret exposure.
 
-Configured router owns safe technical Free-to-Go fallback, returning one final outcome/bounded audit. Codex neither selects models nor refreshes catalog. Unsafe/unknown/terminal failures need domain evaluation, never unchanged retry.
+Configured router owns safe technical Free-to-funded fallback, returning one final outcome/bounded audit. Codex neither selects models nor refreshes catalog. Unsafe/unknown/terminal failures need domain evaluation, never unchanged retry.
 
 `state=waiting_for_credits` is a pending start. With reset waiting enabled, keep authorized task active; await existing runner via host tools, resuming on completion/new concrete blocker without asking user to resubmit. No repeated AI checks/API polling during timer. At predicted reset router refreshes all windows, rechecks eligibility/budgets/unchanged inputs/execution state; later resets may require further waiting. Monetary caps/missing evidence/unknown side effects need triage. In-flight quota failure: inspect delta/report/side effects, plan safe remaining work with new task ID; never blind restart. Host/session lifetime bounds continuation. Configure in [credits.md](credits.md); inspect [credit-wait.md](credit-wait.md) for wait/recovery details only when needed.
 

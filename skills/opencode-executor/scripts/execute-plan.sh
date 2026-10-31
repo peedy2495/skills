@@ -257,7 +257,7 @@ for attempt in 0 1; do
   managed_settled=true
   if ((result != 0 && attempt == 0)) && [[ "$outcome" == safe-technical-free-failure ]]; then
     previous="$run_id"
-    printf 'Routing: safe technical Free failure; checking one default_go start.\n'
+    printf 'Routing: safe technical Free failure; checking one authorized funded start.\n'
     continue
   fi
   if ((result == 0)); then rm -f -- "$route_dir/events.jsonl" "$route_dir/stderr.log"; fi

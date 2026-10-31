@@ -6,6 +6,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd -P)"
 mkdir -p -- "$repo_root/artifacts/opencode/tmp"
 fixture="$(mktemp -d "$repo_root/artifacts/opencode/tmp/executor-test.XXXXXXXX")"
+export SKILLS_STATE_DIR="$fixture/isolated-shared-state"
 trap 'rm -rf -- "$fixture"' EXIT
 repo="$fixture/repo with spaces"
 mkdir -p "$repo/.agents/skills/testing" "$fixture/bin" "$fixture/shared"

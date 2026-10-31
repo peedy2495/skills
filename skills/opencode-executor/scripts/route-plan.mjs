@@ -10,6 +10,7 @@ import { collectUsage } from './collect-usage.mjs';
 import { globalCatalogDirectory } from './catalog-store.mjs';
 import { withCredits, readCredits } from './credits.mjs';
 import { runtimeVersion, executionOverlay } from './opencode-runtime.mjs';
+import { consumerConfiguration, emergencyApproved } from './consumer-config.mjs';
 
 export function contextHash(root, scope = 'project', version = '1.18.31') {
   const sources = [], visited = new Set(), v2 = runtimeVersion(version).major === 2;
@@ -84,16 +85,20 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
   const required = [...new Set(['plan_following', 'tool_use', 'complexity_fit', ...t.operations])];
   const threshold = Math.max(p.minimum_score, t.complexity, t.risk, 3 - t.validation);
   const candidates = [], waiting = [];
-  for (const e of c.entries) {
+  const emergency = [...c.entries, ...(c.unassessed ?? [])].filter(e => emergencyApproved(e, p.emergency_families));
+  for (const [e, isEmergency] of [...c.entries.map(e => [e, false]), ...emergency.map(e => [e, true])]) {
     if (p.allowed_combinations && !p.allowed_combinations.some(x => key(x) === key(e))) continue;
     if ((e.requires_xhigh || e.variant === 'xhigh') && !allowXhigh) continue;
     if (e.context < t.context_tokens + t.output_tokens || e.output < t.output_tokens || e.rates === null || e.billing === 'unknown') continue;
     if (e.input != null && e.input < t.context_tokens) continue;
-    if (!required.every(k => e.assessment[k].score !== null && e.assessment[k].score >= threshold && (p.allow_provisional || e.assessment[k].basis === 'observed'))) continue;
+    if (isEmergency ? required.some(k => e.assessment[k].score === 0) : !required.every(k => e.assessment[k].score !== null && e.assessment[k].score >= threshold && (p.allow_provisional || e.assessment[k].basis === 'observed'))) continue;
     const isGo = p.default_go.some(x => key(x) === key(e));
     const specialist = p.specialists.some(x => key(x) === key(e));
-    const tier = e.billing === 'free' ? 0 : isGo ? 1 : specialist && t.phase === 'specialist' ? 2 : 99;
-    if (tier === 99 || (fallback && !isGo)) continue;
+    const emergencyPaid = isEmergency && e.billing === 'paid';
+    const tier = e.billing === 'free' ? 0 : isGo ? 1 : emergencyPaid || specialist && t.phase === 'specialist' ? 2 : 99;
+    if (tier === 99 || (fallback && !isGo && !emergencyPaid)) continue;
+    if (cfg.shared_pool && !preview && e.billing === 'go' && !shared?.data.volume.enabled) continue;
+    if (emergencyPaid && !preview && !shared?.data.billing.enabled) continue;
     const tokens = Math.ceil(Object.values(t.estimated_tokens).reduce((a, n) => a + n, 0) * p.reserve_multiplier);
     const credits = Math.ceil(Object.entries(t.estimated_tokens).reduce((sum, [k, n]) => sum + n * e.rates[k] / 1_000_000, 0) * p.reserve_multiplier);
     if (![tokens, credits].every(Number.isSafeInteger)) continue;
@@ -104,7 +109,7 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
       if (shared) shared_credits = shared.check(e, { tokens, credits }, phase, null, preview);
     } catch (e) { if (e.code === 'credits_wait') waiting.push(e); continue; }
     const observed = e.outcomes.find(o => o.task_class === taskClass(t) && o.successes > 0);
-    candidates.push({ entry: e, tier, reservation: { tokens, credits }, phase, budget, shared_credits, required, threshold,
+    candidates.push({ entry: e, tier: tier + (isEmergency ? 10 : 0), qualification: isEmergency ? 'user-approved-emergency' : 'assessed', reservation: { tokens, credits }, phase, budget, shared_credits, required, threshold,
       expected: observed ? observed.credits / observed.successes : null });
   }
   if (!candidates.length && waiting.length) {
@@ -115,10 +120,12 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
   const tier = Math.min(...candidates.map(x => x.tier));
   const pool = candidates.filter(x => x.tier === tier);
   const observed = pool.every(x => x.expected !== null);
-  pool.sort((a, z) => (observed ? a.expected - z.expected : a.reservation.credits - z.reservation.credits)
+  const allowance = pool.every(x => x.entry.billing === 'go' && x.shared_credits?.volume_basis === 'verified-allowance');
+  const price = x => allowance ? x.shared_credits.reservation.volume.monthly : observed ? x.expected : x.shared_credits?.reservation.credits ?? x.reservation.credits;
+  pool.sort((a, z) => price(a) - price(z)
     || (z.entry.assessment.cost_efficiency.score ?? -1) - (a.entry.assessment.cost_efficiency.score ?? -1)
     || (key(a.entry) < key(z.entry) ? -1 : key(a.entry) > key(z.entry) ? 1 : 0));
-  return { ...pool[0], cost_basis: observed ? 'observed-total-credits-per-success' : 'estimated-usage; success-cost-unknown' };
+  return { ...pool[0], cost_basis: allowance ? 'documented-go-allowance-estimate' : observed ? 'observed-total-credits-per-success' : 'estimated-usage; success-cost-unknown' };
 }
 function load(root) {
   const cfg = configuration(root);
@@ -175,7 +182,10 @@ export async function admit(root, allowXhigh = false, previous = null, timing = 
       assert(prior.decision.plan_hash === digest(readFileSync(local(root, '.agents/PLAN.md'))), 'Plan changed before fallback');
     } else assert(!Object.values(state.runs).some(r => r.decision.task_id === cfg.t.task_id), 'Task ID already used; supervisor must explicitly replan with a new task ID');
     let choice = select(cfg, state, allowXhigh, !!previous, shared, true);
-    if (shared?.data.volume.enabled && choice.entry.billing === 'go') {
+    if (cfg.shared_pool) {
+      assert(shared, 'Missing shared provider pool');
+      await Promise.all([shared.refreshCodex(), ...(shared.data.volume.enabled ? [shared.refresh()] : [])]);
+    } else if (shared?.data.volume.enabled && choice.entry.billing === 'go') {
       await shared.refresh();
       assert(shared.live && !shared.unavailable, `Go usage unavailable (${shared.data.state.last_error?.code}); no start authorized`);
     }
@@ -187,7 +197,7 @@ export async function admit(root, allowXhigh = false, previous = null, timing = 
       budget_config_hash: digest(cfg.b), plan_hash: digest(readFileSync(local(root, '.agents/PLAN.md'))), workspace_hash: baseline,
       phase: choice.phase, billing: e.billing, reservation: choice.reservation, budget: choice.budget,
       auto_fallback: cfg.p.auto_fallback,
-      eligibility: { required: choice.required, threshold: choice.threshold, assessments: Object.fromEntries(choice.required.map(k => [k, e.assessment[k]])),
+      eligibility: { qualification: choice.qualification, required: choice.required, threshold: choice.threshold, assessments: Object.fromEntries(choice.required.map(k => [k, e.assessment[k]])),
         task_features: { operations: cfg.t.operations, complexity: cfg.t.complexity, risk: cfg.t.risk, validation: cfg.t.validation,
           context_tokens: cfg.t.context_tokens, output_tokens: cfg.t.output_tokens, estimated_tokens: cfg.t.estimated_tokens },
         context: e.context, cost_basis: choice.cost_basis, expected_credits_per_success: choice.expected },
@@ -196,7 +206,7 @@ export async function admit(root, allowXhigh = false, previous = null, timing = 
     state.runs[run_id] = { decision, decision_hash: digest(decision), entry: e, cli_version: cfg.c.source.cli_version, state: 'admitted' };
     task.active = run_id; if (previous) task.fallbacks++; state.tasks[cfg.t.task_id] = task;
     return decision;
-  })), timing);
+  }), timing.funding), timing);
 }
 export async function claim(root, id, timing = {}) {
   const cfg = load(root);
@@ -212,17 +222,22 @@ export async function claim(root, id, timing = {}) {
     if (shared) {
       // Refresh account windows before every real start, including Free runs.
       // A failed refresh gates Go funding; Free work still needs no Go capacity.
-      if (shared.data.volume.enabled) await shared.refresh();
+      await Promise.all([...(shared.data.volume.enabled ? [shared.refresh()] : []), ...(cfg.shared_pool ? [shared.refreshCodex()] : [])]);
       r.start_shared_credits = shared.check({ model: r.decision.model, billing: r.decision.billing }, r.decision.reservation, r.decision.phase, id);
-      shared.claim(r.decision);
+      shared.claim(r.decision, r.start_shared_credits);
     }
     r.started_at = new Date().toISOString();
     r.state = 'started'; return r.decision;
-  })), timing);
+  }), timing.funding), timing);
 }
 export async function finish(root, id, exit) {
   // Do not reload catalog/policy: settle against the immutable admitted snapshot.
-  const budget = json(root, '.agents/budget.json');
+  let budget;
+  if (existsSync(local(root, '.agents/budget.json'))) budget = json(root, '.agents/budget.json');
+  else {
+    budget = json(root, 'artifacts/opencode/budget/state.json').runs[id]?.decision.budget;
+    assert(budget?.enforcement === 'provider-only', 'Missing admitted budget; reconcile execution explicitly');
+  }
   const reference = readState(root, budget).runs[id]?.decision.shared_credits?.path;
   return withCredits(root, reference, shared => transaction(root, budget, s => {
     const r = s.runs[id]; assert(r?.state === 'started' && !r.outcome, 'Execution already settled or not started');
@@ -246,7 +261,8 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
   try {
     const [command, rootArg, value, previous] = process.argv.slice(2), root = realpathSync(rootArg);
     if (command === 'mode') {
-      if (!existsSync(local(root, '.agents/routing-policy.json'))) console.log('legacy');
+      if (consumerConfiguration()) console.log('routed');
+      else if (!existsSync(local(root, '.agents/routing-policy.json'))) console.log('legacy');
       else { const p = json(root, '.agents/routing-policy.json'); assert(p.schema_version === 1 && typeof p.enabled === 'boolean', 'Invalid routing activation'); console.log(p.enabled ? 'routed' : 'legacy'); }
     } else if (command === 'workspace-lock') {
       const directory = local(root, 'artifacts/opencode'); mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -254,7 +270,7 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
       assert(!existsSync(lock), 'Another managed execution or interrupted run owns this workspace'); mkdirSync(lock);
     } else if (command === 'workspace-unlock') rmSync(local(root, 'artifacts/opencode/workspace.lock'), { recursive: true });
     else if (command === 'check') {
-      const cfg = load(root); const choice = select(cfg, readState(root, cfg.b), value === 'true');
+      const cfg = load(root); const choice = select(cfg, readState(root, cfg.b), value === 'true', false, null, true);
       if (cfg.p.credits) readCredits(root, cfg.p.credits);
       console.log(`Router local preflight OK: ${choice.entry.model}; variant=${JSON.stringify(choice.entry.variant)}; estimated budget only.${cfg.p.credits ? ' Shared funding is checked before admission/start; no usage API call in preflight.' : ''}`);
     } else if (command === 'admit') {

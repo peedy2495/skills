@@ -1,28 +1,32 @@
-# Optional deterministic model routing
+# Shared deterministic model routing
 
 Read for integration/policy maintenance; normal planning needs only [routing-task.md](routing-task.md). Conditional details: [routing-budget.md](routing-budget.md) for budgets, [catalog-update.md](catalog-update.md) for explicitly requested updates, [routing-safety.md](routing-safety.md) for admission/fallback/audit/recovery. Node/Bash/Git serve the runner, not product requirements. No new AI classifier/reviewer, provider service or product test framework.
 
 ## Global catalog and separate consumer inputs
 
-Project JSON: schema 1; global catalog: schema 2. Unknown fields/invalid values fail closed; executable SSOT: [routing-schema.mjs](../scripts/routing-schema.mjs). General facts/confirmed variants/curated assessments/advertised prices: `${XDG_CONFIG_HOME:-~/.config}/opencode/model-routing/catalog.json`. Only current versioned JSON persists; successful explicit updates prune old catalog artifacts per [catalog-update.md](catalog-update.md). Never ship installation data here. Consumer owns strategy/approvals/budgets/task features/all run/usage logs. Required `.agents/executor.json` still supplies exact instructions; routed mode ignores legacy model/effort and rejects CLI overrides.
+Project JSON: schema 1; global catalog: schema 2. Unknown fields/invalid values fail closed; executable SSOT: [routing-schema.mjs](../scripts/routing-schema.mjs). General facts/confirmed variants/curated assessments/advertised prices: `${XDG_CONFIG_HOME:-~/.config}/opencode/model-routing/catalog.json`. Only current versioned JSON persists; successful explicit updates prune old artifacts per [catalog-update.md](catalog-update.md). Private shared defaults and provider funding live in the [installation pool](../../../references/provider-pool.md), never in distributed source or per-project copies. Consumers own instructions/task features/run logs and optional tighter limits. Routed mode ignores legacy model/effort and rejects CLI overrides.
 
-Opt in via `.agents/routing-policy.json`:
+Run `node scripts/configure-consumer.mjs` once from the library. Ignored `consumer.json` supplies standing shared approvals without per-project model IDs. Qualification and account capacity are independent gates.
+
+`emergency_families:["deepseek","muse","glm"]` records the user's baseline approval separately from measured quality. Only CLI-present `opencode`/`opencode-go` IDs matching these families, verified billing/prices, tools, context/output limits and existing authorization qualify. Keep all original scores/provenance; explicit required-axis failure (0) excludes a model. Assessed eligible candidates precede emergency candidates; each pool orders Free → Go → authorized paid Console. Paid emergency starts require an enabled shared monetary cap; this does not enable extra Go wallet usage, purchase credits or change account privacy/authentication. Local `emergency_families:[]` disables emergency routing; subsets only. Audit marks `user-approved-emergency`; unknown quality is never called locally verified. No catalogue or no matching eligible CLI entry still prevents execution; no IDs/variants are invented.
+
+Optional consumer `.agents/routing-policy.json` may only restrict shared defaults, for example:
 
 ```json
-{"schema_version":1,"enabled":true,"catalog":"global","allowed_combinations":[],"minimum_score":1,"default_go":[],"specialists":[],"allow_provisional":false,"auto_fallback":true,"reserve_multiplier":1.5}
+{"schema_version":1,"minimum_score":2,"auto_fallback":false}
 ```
 
-Populate `allowed_combinations`, `default_go`, `specialists` with exact `{"model":"provider/id","variant":null}` references to qualified entries. Global routing requires explicit local approvals: publication grants no project authorization. References add no candidates. `default_go` requires verified `go` billing. No built-in model/technology.
+Exact `allowed_combinations`/`default_go` overrides must be subsets of shared approved catalog candidates, including emergency approvals. A project cannot disable shared routing, change catalog/credit pool, lower qualification/reservation margins or expand provisional/fallback authorization. No project allocation increases provider remainder. Optional [project budgets](routing-budget.md) are extra caps; absent budgets use provider-only admission, retaining local execution/audit ledgers without inventing project credit.
 
-Omitted `catalog` or explicit `project` preserves existing schema-1 `.agents/model-catalog.json`; absent local catalog defaults global. Explicit `global` never falls back on missing/incompatible data. No automatic migration/discovery; disabled routing preserves legacy behavior.
+Without shared setup, the existing explicit project-policy/catalog/budget interface remains compatible. Shared setup never silently falls back to it on malformed/missing funding or incompatible catalogs. No automatic discovery/refresh.
 
 Global fingerprint binds CLI executable, global/managed/explicit config, relevant environment and potential `opencode.json`, `opencode.jsonc`, `.opencode` overrides; V2 also binds ancestor configuration, `.agents`/`.claude` agent definitions and runtime adapter. Excludes profiles/tasks/budgets/audits/catalog/revisions. Equivalent OpenCode inputs reuse snapshots despite different instructions/budgets. Potential project overrides conservatively conflict even with project-config discovery disabled; relative explicit paths may vary by cwd. Incompatibility aborts before inference, never updates/switches catalog. Ambient plugin cwd behavior is unprovable by hashes: require trusted deterministic configuration. Hash credentials/config in memory, never copy into catalog.
 
 Required scores: `max(minimum_score, complexity, risk, 3-validation)` for plan following/tool use/complexity fit/task operations. Provisional needs explicit permission. Context must fit required input plus output; respect known input limits separately. Exclude null scores, unknown billing/rates, unauthorized xhigh.
 
-Order: qualified Free, qualified default_go, other configured specialists only for `phase=specialist` (never automatic failure fallback). Within tier, use observed end-to-end credits/success only if every candidate has comparable matching-task-class evidence; else estimated cost/stored efficiency, exact lexical tie-break. Include failed/repaired-task costs in observations. Missing evidence yields no invented probability/success claim. Record raw outcomes without automatic rating promotion.
+Normal order: qualified Free, qualified default_go, configured specialists only for `phase=specialist`. If no normal candidate fits, apply the emergency pool above. Within a Go tier use comparable documented allowance fractions when every candidate has a current conversion; otherwise use comparable observed total credits/success, or estimated token costs including funding multipliers. Mixed conversion/price estimates use token costs, never compare percentages to dollars. Exact lexical tie-break; include failed/repaired-task costs in observations. Missing evidence yields no invented success probability. Record raw outcomes without automatic rating promotion.
 
-Budgets are separate: [routing-budget.md](routing-budget.md). Optional shared `"credits":"skills/credits.json"`: [credits.md](credits.md) for independently enabled billing/Go-volume, script-only dotenv, live usage/resets, cross-consumer reservations. Project budgets still apply; account API never discovers models/refreshes catalog.
+The shared pool is mandatory in common routing. Free requires no Go funding; Go checks fresh windows/reservations using documented conversions or the explicit token-price fallback. Paid Console uses its shared monetary cap. Optional local caps also apply. Both provider observations refresh at admission/start. [Funding](credits.md) owns accounting and script-only dotenv. Codex host requests are observed, not reserved by this runner. Account APIs never discover models/refresh the catalog.
 
 ## Explicit catalog update only
 

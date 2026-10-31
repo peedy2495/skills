@@ -16,6 +16,7 @@ const scripts = fileURLToPath(new URL('.', import.meta.url));
 const scratch = resolve(scripts, '../../../artifacts/opencode/tmp');
 mkdirSync(scratch, { recursive: true });
 const base = mkdtempSync(join(scratch, 'routing-test.'));
+process.env.SKILLS_STATE_DIR = join(base, 'isolated-shared-state');
 after(() => rmSync(base, { recursive: true, force: true }));
 const bin = join(base, 'bin'); mkdirSync(bin);
 const fake = join(bin, 'opencode');
@@ -707,7 +708,8 @@ test('billing follows exact CLI providers, never model-name hints or arbitrary z
   assert.equal(cliBilling('opencode-go/name-free', { providerID: 'opencode-go', cost: zero }).billing, 'go');
   assert.equal(cliBilling('opencode-go/with-unknown-price', { providerID: 'opencode-go' }).billing, 'go');
   for (const id of ['other/name-free', 'opencode-go-copy/name', 'opencode-copy/name']) assert.equal(cliBilling(id, { cost: zero }).billing, 'unknown');
-  for (const cost of [undefined, { input: 0, output: 0 }, { ...zero, output: 1 }, { ...zero, tiers: [{ output: 1 }] }]) {
+  assert.equal(cliBilling('opencode/name-free', { cost: { ...zero, output: 1 } }).billing, 'paid');
+  for (const cost of [undefined, { input: 0, output: 0 }, { ...zero, tiers: [{ output: 1 }] }]) {
     assert.equal(cliBilling('opencode/name-free', { cost }).billing, 'unknown');
   }
   assert.throws(() => cliBilling('opencode/name', { providerID: 'opencode-go', cost: zero }), /conflicts/);

@@ -9,7 +9,7 @@ Read when maintaining routing, handoffs or caching; ordinary tasks use their ski
 | Check evidence | Exact checked inputs, command and environment | Relevant changes, failure or missing evidence |
 | Catalog metadata | Existing runtime/config fingerprint | Incompatibility blocks; never authorizes discovery |
 | User authorization | Recorded decision + consumer/action scope | Scope changes; never expand authority or re-ask for still-valid authorization |
-| Account telemetry | Dated evidence only | Required live admission/claim remains fresh; never infer available capacity |
+| Account telemetry | Provider/account + dated shared observation; never a project balance | Refresh at required admission/claim; preserve other projects' reservations, keep provider units separate |
 
 Reuse material already present; read only changed/newly applicable slices. After compaction retain source pointers and bounded verified progress, then rehydrate missing applicable contracts. Never drop required rules because a cache entry once existed. No credentials, application data or full transcripts in a shared cache.
 

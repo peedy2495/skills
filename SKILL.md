@@ -13,6 +13,6 @@ Load one conditional route:
 
 - Missing/broken integration: [setup](README.md#connect-a-project); first connection captures only OpenCode model metadata once.
 - Substantial authorized delegation: [executor](skills/opencode-executor/SKILL.md); configured routing selects eligible model/variant within budgets.
-- Requested quota/billing information or first working turn each local day: [usage](skills/llm-usage/SKILL.md); bundle unavailable values into at most one daily question.
+- Before a direct work package or on quota requests: [usage](skills/llm-usage/SKILL.md). Delegated starts refresh shared provider observations in the runner; do not query twice. No manual quota maintenance.
 
 Implementation methods, domain skills and check commands come exclusively from the consumer. Keep setup, account and routing administration out of execution prompts. Report outcomes/check evidence/limits briefly; no guaranteed cache hits, measured savings or extra spending implied.

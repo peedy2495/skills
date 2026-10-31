@@ -19,7 +19,8 @@ export function validateCredits(d) {
   assert(typeof b.enabled === 'boolean' && text(b.period) && integer(b.limit_micro_usd) && integer(b.per_run_limit_micro_usd), 'Invalid shared billing limits');
   object(b.reserves_micro_usd, ['repair', 'validation']);
   assert(Object.values(b.reserves_micro_usd).every(integer), 'Invalid shared billing reserves');
-  object(v, ['enabled', 'max_percent', 'reserves_percent', 'rounding_margin_percent', 'timeout_ms', 'allowances'], ['wait_for_reset']);
+  object(v, ['enabled', 'max_percent', 'reserves_percent', 'rounding_margin_percent', 'timeout_ms', 'allowances'], ['wait_for_reset', 'token_price_fallback']);
+  assert(v.token_price_fallback === undefined || typeof v.token_price_fallback === 'boolean', 'Invalid token-price fallback');
   assert(v.wait_for_reset === undefined || typeof v.wait_for_reset === 'boolean', 'Invalid quota wait control');
   assert(typeof v.enabled === 'boolean' && percent(v.rounding_margin_percent) && v.rounding_margin_percent >= 1 && integer(v.timeout_ms) && v.timeout_ms >= 100 && v.timeout_ms <= 15000, 'Invalid Go volume controls');
   object(v.max_percent, windows); assert(Object.values(v.max_percent).every(percent), 'Invalid Go window limits');
@@ -33,7 +34,26 @@ export function validateCredits(d) {
     assert(Object.values(a.limits_micro_usd).every(n => integer(n) && n > 0) && Number.isFinite(a.cost_multiplier) && a.cost_multiplier >= 1, 'Invalid Go allowance conversion');
     assert(text(a.source) && a.source.startsWith('https://') && date(a.verified_at) && date(a.valid_until) && a.valid_until >= a.verified_at, 'Go allowance requires dated evidence');
   }
-  object(d.state, ['period', 'account_hash', 'snapshot', 'runs'], ['last_error']);
+  object(d.state, ['period', 'account_hash', 'snapshot', 'runs'], ['last_error', 'codex']);
+  if (d.state.codex !== undefined) {
+    const c = d.state.codex;
+    object(c, ['status', 'source', 'observed_at', 'buckets'], ['error']);
+    assert(['ok', 'unavailable'].includes(c.status) && c.source === 'codex-app-server:account/rateLimits/read' && instant(c.observed_at), 'Invalid shared Codex snapshot');
+    assert(c.status === 'ok' ? Array.isArray(c.buckets) && c.buckets.length > 0 && c.error === undefined : c.buckets === null && c.error === 'codex_account_limits_unavailable', 'Invalid Codex account observation');
+    for (const bucket of c.buckets ?? []) {
+      object(bucket, ['id', 'primary', 'secondary', 'credits']);
+      assert(/^[a-zA-Z0-9_.:-]{1,120}$/.test(bucket.id), 'Invalid shared Codex bucket');
+      assert(bucket.primary !== null || bucket.secondary !== null || bucket.credits !== null, 'Empty shared Codex bucket');
+      for (const w of [bucket.primary, bucket.secondary].filter(w => w !== null)) {
+        object(w, ['used_percent', 'remaining_percent', 'window_minutes', 'resets_at']);
+        assert(percent(w.used_percent) && percent(w.remaining_percent) && w.remaining_percent === 100 - w.used_percent && integer(w.window_minutes) && w.window_minutes > 0 && instant(w.resets_at) && Date.parse(w.resets_at) > Date.parse(c.observed_at), 'Invalid shared Codex window');
+      }
+      if (bucket.credits !== null) {
+        object(bucket.credits, ['has_credits', 'unlimited', 'balance']);
+        assert(typeof bucket.credits.has_credits === 'boolean' && typeof bucket.credits.unlimited === 'boolean' && (bucket.credits.balance === null || (typeof bucket.credits.balance === 'string' && /^\d+(?:\.\d+)?$/.test(bucket.credits.balance))), 'Invalid shared Codex balance');
+      }
+    }
+  }
   if (d.state.last_error != null) {
     object(d.state.last_error, ['code', 'at']);
     assert(/^(?:usage_key|usage_account|usage_network|usage_http_\d{3}|usage_schema)$/.test(d.state.last_error.code) && instant(d.state.last_error.at), 'Invalid usage failure record');
@@ -117,13 +137,23 @@ export function checkVolume(d, held, volume, phase, now) {
     credits_config_hash: configHash(d), wait_for_reset: v.wait_for_reset === true });
 }
 
-export async function withCredits(root, reference, fn, { fetch: request = globalThis.fetch, now = () => Date.now() } = {}) {
+export async function withCredits(root, reference, fn, { fetch: request = globalThis.fetch, now = () => Date.now(), codex } = {}) {
   if (reference === undefined || reference === null) return fn(null);
   const path = creditsPath(root, reference);
   return withLock(`${path}.lock`, async () => {
     const d = validateCredits(JSON.parse(readFileSync(path, 'utf8'))), hash = configHash(d);
     const ctx = { path, hash, data: d, live: false, unavailable: false,
       persist() { atomicJSON(path, d, 2); },
+      async refreshCodex() {
+        const unavailable = { status: 'unavailable', source: 'codex-app-server:account/rateLimits/read', observed_at: new Date(now()).toISOString(), buckets: null, error: 'codex_account_limits_unavailable' };
+        try {
+          const read = codex ?? (await import('../../llm-usage/scripts/codex-usage.mjs')).readCodexUsage;
+          const result = await read();
+          d.state.codex = result.status === 'ok' ? { status: 'ok', source: result.source, observed_at: result.observed_at, buckets: result.buckets } : unavailable;
+          validateCredits(d);
+        } catch { d.state.codex = unavailable; }
+        ctx.persist();
+      },
       async refresh() {
         if (ctx.live) return;
         let stage = 'usage_key';
@@ -150,31 +180,35 @@ export async function withCredits(root, reference, fn, { fetch: request = global
       },
       check(entry, reservation, phase, without = null, preview = false) {
         const a = d.volume.allowances[entry.model];
+        const currentAllowance = a && now() <= Date.parse(`${a.valid_until}T23:59:59.999Z`);
         const multiplier = entry.billing === 'go' ? a?.cost_multiplier ?? 1 : 1;
         const credits = Math.ceil(reservation.credits * multiplier);
         assert(integer(credits), 'Shared credit arithmetic overflow');
         const held = Object.entries(d.state.runs).filter(([id]) => id !== without).map(([, r]) => r);
         const used = r => r.usage_credits ?? r.reservation.credits;
-        let billing = null, volume = units(() => 0), evidence = null;
-        if (d.billing.enabled) {
+        let billing = null, volume = units(() => 0), evidence = null, volume_basis = 'none';
+        assert(entry.billing !== 'paid' || d.billing.enabled, 'Paid Console starts require a shared monetary cap');
+        if (d.billing.enabled && credits > 0) {
           const spent = held.reduce((n, r) => n + used(r), 0);
           const protectedCredits = ['repair', 'validation'].filter(p => p !== phase).reduce((n, p) => n + Math.max(0, d.billing.reserves_micro_usd[p] - held.filter(r => r.phase === p).reduce((s, r) => s + used(r), 0)), 0);
           assert(integer(spent) && integer(protectedCredits) && credits <= d.billing.per_run_limit_micro_usd && spent + credits + protectedCredits <= d.billing.limit_micro_usd, 'Shared billing budget or protected reserves exceeded');
           billing = { before: spent, reservation: credits, protected: protectedCredits, limit: d.billing.limit_micro_usd, period: d.billing.period, enforcement: 'estimated' };
         }
         if (d.volume.enabled && entry.billing === 'go') {
-          assert(a && now() <= Date.parse(`${a.valid_until}T23:59:59.999Z`), 'No current verified Go allowance for selected model');
-          volume = units(w => credits / a.limits_micro_usd[w] * 100);
+          assert(currentAllowance || d.volume.token_price_fallback === true, 'No current verified Go allowance for selected model');
+          volume_basis = currentAllowance ? 'verified-allowance' : 'token-price';
+          volume = currentAllowance ? units(w => credits / a.limits_micro_usd[w] * 100) : units(() => 0);
           if (!preview) {
             assert(ctx.live && !ctx.unavailable, 'Fresh Go usage required; admission denied');
+            if (!currentAllowance) assert(!held.some(r => r.model.startsWith('opencode-go/') && (r.state !== 'finished' || r.usage_credits === null)), 'Token-price fallback waits for other shared Go runs to settle');
             try { evidence = checkVolume(d, held, volume, phase, now()); }
             catch (e) {
-              assert(e.code !== 'credits_wait' || Date.parse(e.retry_at) <= Date.parse(`${a.valid_until}T23:59:59.999Z`), 'Go allowance expires before the relevant reset; explicit verification required');
+              assert(!currentAllowance || e.code !== 'credits_wait' || Date.parse(e.retry_at) <= Date.parse(`${a.valid_until}T23:59:59.999Z`), 'Go allowance expires before the relevant reset; explicit verification required');
               throw e;
             }
           }
         }
-        return { path, config_hash: hash, billing, volume: evidence, observed_at: evidence ? d.state.snapshot.observed_at : null,
+        return { path, config_hash: hash, billing, volume: evidence, volume_basis, observed_at: evidence ? d.state.snapshot.observed_at : null,
           enforcement: 'estimated-start-admission', reservation: { credits, volume }, cost_multiplier: multiplier };
       },
       reserve(decision) {
@@ -187,10 +221,13 @@ export async function withCredits(root, reference, fn, { fetch: request = global
         // balance twice. Never release it automatically on an interrupted commit.
         ctx.persist();
       },
-      claim(decision) {
+      claim(decision, startFunding = decision.shared_credits) {
         const r = d.state.runs[decision.run_id];
         assert(r?.state === 'admitted' && r.project_hash === digest(realpathSync(root)) && r.decision_hash === digest(decision), 'Shared start permission missing or already used');
         assert(decision.shared_credits.config_hash === hash, 'Shared credit configuration changed after admission');
+        // Evidence can expire between admission and claim. Retain the admitted
+        // identity/cost, but expose the unknown percentage to every other start.
+        if (startFunding.volume_basis === 'token-price') r.reservation = { ...r.reservation, volume: units(() => 0) };
         r.state = 'started'; ctx.persist();
       },
       settle(decision, usage) {
@@ -220,7 +257,7 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(fileURLToPath
       writeSync(1, JSON.stringify({ status: failed ? 'unavailable' : 'ok', refreshed: ctx.live,
         billing_enabled: ctx.data.billing.enabled, volume_enabled: ctx.data.volume.enabled,
         wait_for_reset: ctx.data.volume.wait_for_reset === true,
-        snapshot: ctx.data.state.snapshot, last_error: ctx.data.state.last_error ?? null, managed_runs: Object.keys(ctx.data.state.runs).length, extra_credit_budget_micro_usd: 0 }, null, 2) + '\n');
+        snapshot: ctx.data.state.snapshot, codex: ctx.data.state.codex ?? null, last_error: ctx.data.state.last_error ?? null, managed_runs: Object.keys(ctx.data.state.runs).length, extra_credit_budget_micro_usd: 0 }, null, 2) + '\n');
       if (failed) process.exitCode = 75;
     });
   } catch {

@@ -5,5 +5,6 @@ __pycache__/
 !/.env.example
 /credits.json
 /credits.json.lock/
+/consumer.json
 /.quota-prompt.json
 /.quota-prompt.json.lock/

@@ -32,7 +32,7 @@ default: process.exit(99);
 }
 `, { mode: 0o755 });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENCODE_') && !key.startsWith('CODEX_')));
-Object.assign(env, { PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: join(base, 'config'), CONNECT_TEST_CALLS: calls });
+Object.assign(env, { PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: join(base, 'config'), SKILLS_STATE_DIR: join(base, 'isolated-shared-state'), CONNECT_TEST_CALLS: calls });
 let serial = 0;
 function fixture() {
   const root = join(base, `consumer ${serial++}`); mkdirSync(root);
@@ -75,14 +75,16 @@ test('failed initialization keeps retryable links and no success marker', () => 
   const retry = connect(root); assert.equal(retry.status, 0, retry.stderr); assert(existsSync(join(root, '.agents/skills-setup.json')));
 });
 
-test('daily reminder CLI resolves the shared state through different consumer links', () => {
-  const first = fixture(), second = fixture();
+test('different consumer links resolve the same provider pool without local balances', () => {
+  const first = fixture(), second = fixture(), shared = join(base, 'shared-providers'); mkdirSync(shared);
+  cpSync(join(source, 'consumer.example.json'), join(shared, 'consumer.json'));
+  cpSync(join(source, 'credits.example.json'), join(shared, 'credits.json'));
   for (const root of [first, second]) symlinkSync('../skills', join(root, 'skills'));
-  const claim = root => spawnSync(process.execPath, [join(root, 'skills/skills/llm-usage/scripts/daily-prompt.mjs'), 'claim', '--timezone', 'Europe/Berlin'], { cwd: root, env, encoding: 'utf8' });
-  const a = claim(first), b = claim(second); assert.equal(a.status, 0, a.stderr); assert.equal(b.status, 0, b.stderr);
-  assert.equal(JSON.parse(a.stdout).ask, true); assert.equal(JSON.parse(b.stdout).ask, false);
-  assert(existsSync(join(library, '.quota-prompt.json')));
-  assert(!existsSync(join(first, '.quota-prompt.json')) && !existsSync(join(second, '.quota-prompt.json')));
+  const read = root => spawnSync(process.execPath, ['--input-type=module', '-e', "import {consumerConfiguration} from './skills/skills/opencode-executor/scripts/consumer-config.mjs'; import{writeSync}from'node:fs';writeSync(1,consumerConfiguration().credits);"], { cwd: root, env: { ...env, SKILLS_STATE_DIR: shared }, encoding: 'utf8' });
+  for (const root of [first, second]) {
+    const result = read(root); assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, join(shared, 'credits.json'));
+    assert(!existsSync(join(root, 'credits.json')));
+  }
 });
 
 test('only library aliases are retired; consumer domain skills stay local and maintenance is not discovered', () => {

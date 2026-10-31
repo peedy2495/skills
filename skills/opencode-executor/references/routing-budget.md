@@ -1,6 +1,6 @@
 # Project routing budgets
 
-Read for budget setup/admission failures; [model-routing.md](model-routing.md) owns policy/catalog setup. `.agents/budget.json` is independent of strategy/catalog. Schema example, never spending advice:
+Read for additional project restrictions/admission failures; [model-routing.md](model-routing.md) owns shared defaults. With common setup, provider remainder and global reservations govern every project; no local budget file is required. Optional `.agents/budget.json` only tightens capacity and cannot allocate additional credit. Schema example, never spending advice:
 
 ```json
 {
@@ -25,4 +25,4 @@ Reserve whole estimated execution × `reserve_multiplier`. Unspent repair/valida
 
 Only `enforcement=estimated` works: reservations technically gate managed starts, never cap individual requests/stop in-flight spend. Overruns reduce later availability. Hard enforcement fails closed pending a proven adapter. Phase reserves cannot make an autonomous model postpone spending until testing.
 
-Optional [shared credits](credits.md) adds account checks, never replaces project limits. Recovery/period changes require [routing-safety.md](routing-safety.md); no automatic ledger reset.
+[Shared credits](credits.md) are authoritative in common routing; optional project limits must also pass. Without a local budget, the internal `provider-only` ledger mode tracks execution history but grants no capacity. It cannot be supplied as a public budget override. Recovery/period changes require [routing-safety.md](routing-safety.md); no automatic ledger reset.

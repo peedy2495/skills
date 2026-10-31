@@ -2,6 +2,7 @@ import { readFileSync, realpathSync, existsSync } from 'node:fs';
 import { resolve, relative, isAbsolute, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { globalCatalogPath } from './catalog-store.mjs';
+import { consumerConfiguration, sharedPolicy } from './consumer-config.mjs';
 
 export const axes = ['plan_following', 'implementation', 'debugging', 'refactoring', 'tool_use', 'complexity_fit', 'cost_efficiency'];
 export const phases = ['implementation', 'fallback', 'repair', 'validation', 'specialist'];
@@ -111,34 +112,43 @@ export function catalog(c) {
   return c;
 }
 export function configuration(root) {
-  const p = json(root, '.agents/routing-policy.json');
-  object(p, ['schema_version', 'enabled', 'minimum_score', 'default_go', 'specialists', 'allow_provisional', 'auto_fallback', 'reserve_multiplier'], ['catalog', 'allowed_combinations', 'credits']);
+  const shared = consumerConfiguration();
+  const overrides = existsSync(local(root, '.agents/routing-policy.json')) ? json(root, '.agents/routing-policy.json') : null;
+  const centralCatalog = shared ? catalog(JSON.parse(readFileSync(globalCatalogPath(), 'utf8'))) : null;
+  const p = shared ? sharedPolicy(shared, centralCatalog, overrides, root) : overrides;
+  object(p, ['schema_version', 'enabled', 'minimum_score', 'default_go', 'specialists', 'allow_provisional', 'auto_fallback', 'reserve_multiplier'], ['catalog', 'allowed_combinations', 'credits', 'emergency_families']);
+  assert(p.emergency_families === undefined || (shared && Array.isArray(p.emergency_families)), 'Emergency approvals require shared configuration');
   assert(p.credits === undefined || text(p.credits), 'Invalid shared credits path');
   const scope = p.catalog ?? (existsSync(local(root, '.agents/model-catalog.json')) ? 'project' : 'global');
   assert(['project', 'global'].includes(scope), 'Invalid catalog scope');
-  const c = catalog(scope === 'project' ? json(root, '.agents/model-catalog.json') : JSON.parse(readFileSync(globalCatalogPath(), 'utf8')));
+  const c = centralCatalog ?? catalog(scope === 'project' ? json(root, '.agents/model-catalog.json') : JSON.parse(readFileSync(globalCatalogPath(), 'utf8')));
+  assert(!shared || c.credit_unit === 'microUSD', 'Shared Go funding requires microUSD catalog rates');
   assert(scope !== 'global' || c.schema_version === 2, 'Global routing requires a versioned global catalog');
   assert(p.schema_version === 1 && p.enabled === true && integer(p.minimum_score) && p.minimum_score <= 3, 'Invalid routing policy');
   assert(typeof p.allow_provisional === 'boolean' && typeof p.auto_fallback === 'boolean' && Number.isFinite(p.reserve_multiplier) && p.reserve_multiplier >= 1, 'Invalid routing controls');
-  assert(scope !== 'global' || Array.isArray(p.allowed_combinations), 'Global catalog requires project-local model/variant approvals');
+  assert(scope !== 'global' || Array.isArray(p.allowed_combinations), 'Global catalog requires approved model/variant combinations');
   for (const name of ['default_go', 'specialists', ...(p.allowed_combinations === undefined ? [] : ['allowed_combinations'])]) {
     assert(Array.isArray(p[name]), 'Invalid routing group');
     for (const member of p[name]) {
       object(member, ['model', 'variant']);
-      const e = c.entries.find(e => key(e) === key(member));
+      const e = [...c.entries, ...(shared ? c.unassessed : [])].find(e => key(e) === key(member));
       assert(e && (name !== 'default_go' || e.billing === 'go'), 'Routing group must reference qualified catalog entries');
     }
   }
-  const b = json(root, '.agents/budget.json');
-  object(b, ['schema_version', 'period', 'credit_unit', 'enforcement', 'project', 'per_run', 'phases', 'reserves'], ['specialist_limits']);
-  assert(b.schema_version === 1 && text(b.period) && b.credit_unit === c.credit_unit && b.enforcement === 'estimated', 'Unsupported budget enforcement or unit');
-  amount(b.project); amount(b.per_run); object(b.phases, phases); phases.forEach(k => amount(b.phases[k]));
-  object(b.reserves, ['repair', 'validation']); amount(b.reserves.repair); amount(b.reserves.validation);
-  if (b.specialist_limits !== undefined) {
-    assert(Array.isArray(b.specialist_limits), 'Invalid specialist limits');
-    for (const limit of b.specialist_limits) {
-      object(limit, ['model', 'variant', 'limit']); amount(limit.limit);
-      assert(c.entries.some(e => key(e) === key(limit)), 'Specialist limit must reference catalog combination');
+  const hasBudget = existsSync(local(root, '.agents/budget.json'));
+  assert(shared || hasBudget, 'Missing project budget without shared provider configuration');
+  const b = hasBudget ? json(root, '.agents/budget.json') : { schema_version: 1, period: 'provider-pool-v1', credit_unit: c.credit_unit, enforcement: 'provider-only' };
+  if (hasBudget) {
+    object(b, ['schema_version', 'period', 'credit_unit', 'enforcement', 'project', 'per_run', 'phases', 'reserves'], ['specialist_limits']);
+    assert(b.schema_version === 1 && text(b.period) && b.credit_unit === c.credit_unit && b.enforcement === 'estimated', 'Unsupported budget enforcement or unit');
+    amount(b.project); amount(b.per_run); object(b.phases, phases); phases.forEach(k => amount(b.phases[k]));
+    object(b.reserves, ['repair', 'validation']); amount(b.reserves.repair); amount(b.reserves.validation);
+    if (b.specialist_limits !== undefined) {
+      assert(Array.isArray(b.specialist_limits), 'Invalid specialist limits');
+      for (const limit of b.specialist_limits) {
+        object(limit, ['model', 'variant', 'limit']); amount(limit.limit);
+        assert(c.entries.some(e => key(e) === key(limit)), 'Specialist limit must reference catalog combination');
+      }
     }
   }
   const t = json(root, '.agents/executor-task.json');
@@ -149,6 +159,6 @@ export function configuration(root) {
   assert(integer(t.context_tokens) && t.context_tokens > 0 && integer(t.output_tokens) && t.output_tokens > 0, 'Invalid context requirement');
   object(t.estimated_tokens, ['input', 'output', 'cache_read', 'cache_write']);
   assert(Object.values(t.estimated_tokens).every(integer) && Object.values(t.estimated_tokens).some(n => n > 0), 'Missing usage estimate');
-  return { c, p, b, t, catalog_scope: scope };
+  return { c, p, b, t, catalog_scope: scope, ...(shared ? { shared_pool: { directory: shared.directory, credits: shared.credits, refresh_codex: true } } : {}) };
 }
 export const taskClass = t => JSON.stringify([[...new Set(t.operations)].sort(), t.complexity, t.risk, t.validation]);
