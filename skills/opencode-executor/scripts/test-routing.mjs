@@ -499,8 +499,10 @@ test('risk/validation thresholds exclude weak Free; base Go omits variant and ov
   const t = configuration(root).t; t.risk = 3; t.validation = 0; save(root, '.agents/executor-task.json', t);
   successful(run(root)); assert.equal(calls(root)[0].model, 'fixture/go'); assert.equal(calls(root)[0].variant, null);
 });
-test('known observed total cost ranks peers; absent success data stays unknown', () => {
-  const root = fixture(), cfg = configuration(root), other = entry('fixture/another-free', 'exact', 'free');
+test('known observed total cost ranks funded peers; absent success data stays unknown', () => {
+  const root = fixture(), cfg = configuration(root), other = entry('fixture/another-go', 'exact', 'go');
+  cfg.c.entries = cfg.c.entries.filter(e => e.billing === 'go');
+  cfg.p.default_go.push({ model: other.model, variant: other.variant });
   cfg.c.entries.push(other);
   cfg.c.entries[0].outcomes = [{ task_class: taskClass(cfg.t), attempts: 4, successes: 2, credits: 600 }];
   other.outcomes = [{ task_class: taskClass(cfg.t), attempts: 2, successes: 2, credits: 40 }];
@@ -874,24 +876,24 @@ test('refresh is explicit, local CLI only, validates effective custom variants, 
 test('successful catalog publication keeps only current data and prunes owned artifacts without touching audits, sources or symlink targets', () => {
   for (const global of [false, true]) {
     const root = fixture(), previous = configuration(root).c;
-    const target = global ? join(root, 'global-model-routing/catalog.json') : join(root, '.agents/model-catalog.json');
-    mkdirSync(join(root, global ? 'global-model-routing' : '.agents'), { recursive: true });
+    const target = global ? join(root, 'catalog.json') : join(root, '.agents/model-catalog.json');
+    mkdirSync(global ? root : join(root, '.agents'), { recursive: true });
     writeFileSync(target, JSON.stringify(previous));
-    const store = global ? join(root, 'global-model-routing') : join(root, '.agents');
+    const store = global ? root : join(root, '.agents');
     const scratch = join(root, 'artifacts/opencode'); mkdirSync(scratch, { recursive: true });
-    for (const path of [...(global ? [join(store, 'revisions')] : []), join(store, 'catalog-update-old'), join(scratch, 'catalog-revisions'), join(scratch, 'catalog-update'), join(scratch, 'catalog-update-old')]) {
+    for (const path of [join(store, 'catalog-update-old'), join(scratch, 'catalog-revisions'), join(scratch, 'catalog-update'), join(scratch, 'catalog-update-old')]) {
       mkdirSync(path); writeFileSync(join(path, 'invalid.json'), '{obsolete', { mode: 0o400 });
     }
     const temp = `${target}.00000000-0000-0000-0000-000000000000`; writeFileSync(temp, '{orphan');
     const foreign = join(root, 'unrelated'); mkdirSync(foreign); writeFileSync(join(foreign, 'keep'), 'preserved');
     symlinkSync(foreign, join(scratch, 'catalog-update-linked'));
-    const protectedPaths = [join(store, 'notes.txt'), ...(global ? [] : [join(store, 'revisions/unrelated.txt')]), `${target}.manual-backup`, join(scratch, 'runs/decision.json'), join(scratch, 'budget/state.json'), join(scratch, 'v2-migration/report.md'), join(root, '.agents/assessments.json')];
+    const protectedPaths = [join(store, 'notes.txt'), join(store, 'revisions/unrelated.txt'), `${target}.manual-backup`, join(scratch, 'runs/decision.json'), join(scratch, 'budget/state.json'), join(scratch, 'v2-migration/report.md'), join(root, '.agents/assessments.json')];
     for (const path of protectedPaths) { mkdirSync(resolve(path, '..'), { recursive: true }); writeFileSync(path, 'preserved'); }
     const next = { ...previous, revision: 'only-current' };
-    assert.equal(publishCatalog(target, next, previous, [root]), global ? 7 : 6);
+    assert.equal(publishCatalog(target, next, previous, [root]), 6);
     assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')), next); assert.match(readFileSync(target, 'utf8'), /\n  "schema_version"/);
     for (const name of ['catalog-revisions', 'catalog-update', 'catalog-update-old', 'catalog-update-linked']) assert.equal(existsSync(join(scratch, name)), false);
-    assert.equal(existsSync(join(store, 'revisions')), !global); assert.equal(existsSync(join(store, 'catalog-update-old')), false); assert.equal(existsSync(temp), false);
+    assert.equal(existsSync(join(store, 'revisions')), true); assert.equal(existsSync(join(store, 'catalog-update-old')), false); assert.equal(existsSync(temp), false);
     for (const path of [...protectedPaths, join(foreign, 'keep')]) assert.equal(readFileSync(path, 'utf8'), 'preserved');
     assert.equal(existsSync(`${target}.lock`), false);
   }

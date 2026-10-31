@@ -7,11 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { configureConsumer } from './configure-consumer.mjs';
 import { consumerConfiguration } from '../skills/opencode-executor/scripts/consumer-config.mjs';
-import { axes, phases, digest, configuration } from '../skills/opencode-executor/scripts/routing-schema.mjs';
+import { axes, phases, digest, configuration, taskClass } from '../skills/opencode-executor/scripts/routing-schema.mjs';
 import { contextHash, admit, claim, finish, select } from '../skills/opencode-executor/scripts/route-plan.mjs';
 import { withCredits, normalizeUsage } from '../skills/opencode-executor/scripts/credits.mjs';
-import { readState } from '../skills/opencode-executor/scripts/budget.mjs';
+import { readState, checkBudget } from '../skills/opencode-executor/scripts/budget.mjs';
 import { documentedAllowances } from '../skills/opencode-executor/scripts/go-allowances.mjs';
+import { globalCatalogPath } from '../skills/opencode-executor/scripts/catalog-store.mjs';
 
 const source = fileURLToPath(new URL('..', import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), 'shared-provider-test-'));
@@ -56,7 +57,7 @@ async function fixture(entries = [entry('opencode-go/fixture', 'go')]) {
  }
  const config = JSON.parse(readFileSync(join(shared, 'consumer.json'))); config.reserve_multiplier = 1; put(join(shared, 'consumer.json'), config);
  const catalog = { schema_version: 2, revision: 'fixture', credit_unit: 'microUSD', source: { kind: 'opencode-cli', scope: 'global', cli_version: '1.18.31', captured_at: new Date().toISOString(), metadata_hash: 'fixture', context_hash: contextHash(projects[0], 'global') }, entries, unassessed: [], exclusions: [] };
- const directory = join(process.env.XDG_CONFIG_HOME, 'opencode/model-routing'); mkdirSync(directory, { recursive: true }); put(join(directory, 'catalog.json'), catalog);
+ put(globalCatalogPath(), catalog);
  return { base, shared, file, projects, catalog, config };
 }
 
@@ -162,7 +163,7 @@ test('approved emergency families start with unknown scores, keep Free first, an
  const free = unknown('opencode/deepseek-fixture-free'), paid = unknown('opencode-go/glm-fixture'); paid.billing = 'go'; paid.rates = entry('x', 'go').rates;
  const unrelated = unknown('opencode/unapproved-free');
  const f = await fixture([]); f.catalog.unassessed = [free, paid, unrelated];
- put(join(process.env.XDG_CONFIG_HOME, 'opencode/model-routing/catalog.json'), f.catalog);
+ put(globalCatalogPath(), f.catalog);
  const exhausted = JSON.parse(readFileSync(f.file)); exhausted.billing.limit_micro_usd = 0; exhausted.billing.per_run_limit_micro_usd = 0; put(f.file, exhausted);
  const root = f.projects[0], d = await admit(root, false, null, funding(100));
  assert.equal(d.model, free.model); assert.equal(d.eligibility.qualification, 'user-approved-emergency');
@@ -171,13 +172,63 @@ test('approved emergency families start with unknown scores, keep Free first, an
  put(join(f.projects[1], '.agents/routing-policy.json'), { schema_version: 1, emergency_families: [] });
  assert.throws(() => select(configuration(f.projects[1]), { runs: {}, tasks: {} }, false), /No sufficiently/);
  free.assessment.tool_use = { score: 0, basis: 'observed', evidence: 'Fixture failure' }; f.catalog.unassessed = [free, unrelated];
- put(join(process.env.XDG_CONFIG_HOME, 'opencode/model-routing/catalog.json'), f.catalog);
+ put(globalCatalogPath(), f.catalog);
  assert.throws(() => select(configuration(root), { runs: {}, tasks: {} }, false), /No sufficiently/);
+});
+
+test('approved Free is selected before assessed Go; assessed Free wins within the Free pool', async () => {
+ const go = entry('opencode-go/fixture', 'go'), free = entry('opencode/deepseek-fixture-free', 'free');
+ for (const a of Object.values(free.assessment)) Object.assign(a, { score: null, basis: 'unknown' });
+ const f = await fixture([go]); f.catalog.unassessed = [free];
+ const file = globalCatalogPath(); put(file, f.catalog);
+ const cfg = configuration(f.projects[0]), state = { runs: {}, tasks: {} };
+ assert.equal(select(cfg, state, false, false, null, true).entry.model, free.model);
+ const assessedFree = entry('fixture/assessed-free', 'free');
+ f.catalog.entries.push(assessedFree); put(file, f.catalog);
+ assert.equal(select(configuration(f.projects[0]), state, false, false, null, true).entry.model, assessedFree.model);
+ assert.equal(select(cfg, state, false, true, null, true).entry.model, go.model);
+ free.assessment.tool_use = { score: 0, basis: 'observed', evidence: 'Known fixture failure' };
+ f.catalog.entries = [go]; put(file, f.catalog);
+ assert.equal(select(configuration(f.projects[0]), state, false, false, null, true).entry.model, go.model);
+});
+
+test('Free ranking uses required task suitability and ignores monetary history and cost-efficiency grades', async () => {
+ const strong = entry('fixture/z-strong-free', 'free'), weak = entry('fixture/a-weak-free', 'free');
+ for (const a of Object.values(weak.assessment)) a.score = 2;
+ strong.assessment.cost_efficiency.score = 0; weak.assessment.cost_efficiency.score = 3;
+ const f = await fixture([strong, weak]), cfg = configuration(f.projects[0]);
+ strong.outcomes = [{ task_class: taskClass(cfg.t), attempts: 2, successes: 1, credits: 9999 }];
+ weak.outcomes = [{ task_class: taskClass(cfg.t), attempts: 2, successes: 2, credits: 0 }];
+ cfg.c.entries = [strong, weak];
+ const selected = select(cfg, { runs: {}, tasks: {} }, false);
+ assert.equal(selected.entry.model, strong.model); assert.equal(selected.cost_basis, 'free; required-task-suitability; no-monetary-ranking');
+});
+
+test('Free starts ignore exhausted monetary caps but still obey token and specialist limits', () => {
+ const cap = { tokens: 1000, credits: 0 }, b = { schema_version: 1, period: 'fixture', credit_unit: 'microUSD', enforcement: 'estimated',
+   project: cap, per_run: cap, phases: Object.fromEntries(phases.map(p => [p, cap])),
+   reserves: { repair: { tokens: 0, credits: 50 }, validation: { tokens: 0, credits: 50 } } };
+ const s = { runs: { prior: { decision: { phase: 'implementation', reservation: { tokens: 10, credits: 999 } }, outcome: { usage: { tokens: 10, credits: 999 } } } } };
+ const free = { model: 'fixture/free', variant: null, billing: 'free' };
+ assert.doesNotThrow(() => checkBudget(s, b, { tokens: 100, credits: 0 }, 'implementation', free));
+ assert.throws(() => checkBudget(s, b, { tokens: 1001, credits: 0 }, 'implementation', free), /budget/);
+ assert.throws(() => checkBudget(s, b, { tokens: 100, credits: 1 }, 'implementation', { ...free, billing: 'go' }), /budget/);
+ assert.throws(() => checkBudget(s, b, { tokens: 100, credits: 0 }, 'specialist', free), /Specialist/);
+});
+
+test('a start admitted under the former ordering cannot reuse its old policy hash', async () => {
+ const f = await fixture([entry('fixture/free', 'free')]), root = f.projects[0];
+ const d = await admit(root, false, null, funding(0)), file = join(root, 'artifacts/opencode/budget/state.json');
+ const state = JSON.parse(readFileSync(file));
+ state.runs[d.run_id].decision.policy_hash = digest(configuration(root).p);
+ state.runs[d.run_id].decision_hash = digest(state.runs[d.run_id].decision); put(file, state);
+ await assert.rejects(claim(root, d.run_id, funding(0)), /Start inputs changed/);
+ assert.equal(JSON.parse(readFileSync(file)).runs[d.run_id].state, 'admitted');
 });
 
 test('missing or expired conversions permit token-priced Go starts but preserve fresh quotas and cross-project serialization', async () => {
  const e = entry('opencode-go/glm-fixture', 'go'); for (const a of Object.values(e.assessment)) Object.assign(a, { score: null, basis: 'unknown' });
- const f = await fixture([]); f.catalog.unassessed = [e]; put(join(process.env.XDG_CONFIG_HOME, 'opencode/model-routing/catalog.json'), f.catalog);
+ const f = await fixture([]); f.catalog.unassessed = [e]; put(globalCatalogPath(), f.catalog);
  const pool = JSON.parse(readFileSync(f.file)); pool.volume.allowances[e.model] = { ...pool.volume.allowances['opencode-go/fixture'], verified_at: '2020-01-01', valid_until: '2020-01-02' }; put(f.file, pool);
  const a = await admit(f.projects[0], false, null, funding(0));
  assert.equal(a.billing, 'go'); assert.equal(a.shared_credits.volume_basis, 'token-price'); assert.equal(a.reservation.credits, 200);
@@ -220,7 +271,7 @@ test('a conversion expiring between admission and claim switches to the serializ
 
 test('paid emergency Console models require the shared monetary cap and use the cheapest admitted token estimate', async () => {
  const paid = entry('opencode/muse-fixture', 'paid'); for (const a of Object.values(paid.assessment)) Object.assign(a, { score: null, basis: 'unknown' });
- const f = await fixture([]); f.catalog.unassessed = [paid]; put(join(process.env.XDG_CONFIG_HOME, 'opencode/model-routing/catalog.json'), f.catalog);
+ const f = await fixture([]); f.catalog.unassessed = [paid]; put(globalCatalogPath(), f.catalog);
  const selected = await admit(f.projects[0], false, null, funding(0)); assert.equal(selected.billing, 'paid');
  let d = JSON.parse(readFileSync(f.file)); d.billing.enabled = false; put(f.file, d);
  await assert.rejects(admit(f.projects[1], false, null, funding(0)));

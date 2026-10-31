@@ -11,7 +11,7 @@ node scripts/configure-consumer.mjs
 node scripts/provider-status.mjs --refresh
 ```
 
-All projects then consume the same provider remainder and shared reservations. Ignored `consumer.json` supplies common routing defaults; [provider pool](references/provider-pool.md) owns scope, setup and limits. No project receives a separate credit allocation. DeepSeek, Muse and GLM are approved emergency families; missing quality scores or quota conversions alone never prevent their emergency starts. Unknown provider capacity remains unknown.
+All projects then consume the same provider remainder and shared reservations. The shared model catalog is ignored `./catalog.json` in this checkout, also reached as `skills/catalog.json` from consumers. Ignored `consumer.json` supplies common routing defaults; [provider pool](references/provider-pool.md) owns scope, setup and limits. No project receives a separate credit allocation. DeepSeek, Muse and GLM are approved emergency families; missing quality scores or quota conversions alone never prevent their emergency starts. Unknown provider capacity remains unknown.
 
 Clone this repository beside the consumer, then run from the consumer Git root:
 
@@ -35,7 +35,7 @@ Direct work needs no executor profile. For delegation create secret-free consume
 {"instructions":["AGENTS.md"]}
 ```
 
-List exact existing consumer Markdown constraints; resolve applicable ancestor/nested rules explicitly through project-owned files. Empty instructions only when the plan supplies all constraints. Domain skills live under consumer `.agents/skills/`; this library never creates them. Invalid fields/traversal/external profile links fail closed. Shared routing selects assessed models, then the approved emergency pool, Free before funded within each pool. Paid Console emergency starts require a shared monetary cap; Go uses the existing subscription. Local restrictions cannot enlarge provider capacity. Existing manual profiles remain compatible without shared setup.
+List exact existing consumer Markdown constraints; resolve applicable ancestor/nested rules explicitly through project-owned files. Empty instructions only when the plan supplies all constraints. Domain skills live under consumer `.agents/skills/`; this library never creates them. Invalid fields/traversal/external profile links fail closed. Shared routing selects eligible Free before Go/paid; within each billing class, assessed candidates precede approved emergency candidates. Paid Console emergency starts require a shared monetary cap; Go uses the existing subscription. Local restrictions cannot enlarge provider capacity. Existing manual profiles remain compatible without shared setup.
 
 Create Ready `.agents/PLAN.md` from the [task template](skills/opencode-executor/references/plan-template.md), then:
 
@@ -46,7 +46,7 @@ bash skills/skills/opencode-executor/scripts/execute-plan.sh
 
 `--check` is read-only without inference. xhigh requires explicit authorization and `--allow-xhigh`. Stable selected constraints are injected once before changing task data. Current report: `.agents/IMPLEMENTATION_REPORT.md`; scratch/logs: consumer `artifacts/opencode/`. Preserve accounting/audit state. Enabled routing alone owns one verified safe technical fallback; never retry work with unknown effects.
 
-Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared funding](skills/opencode-executor/references/credits.md). Keep installation-local `consumer.json`, `credits.json`, `.env` and locks ignored. Multiple checkouts must use the same `SKILLS_STATE_DIR` to coordinate reservations; copies create no shared capacity. Codex observations refresh automatically but this runner cannot reserve host-owned Codex turns. Account observations never replace fresh Go admission.
+Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared funding](skills/opencode-executor/references/credits.md). Keep installation-local `catalog.json`, its locks/temporary files, `consumer.json`, `credits.json` and `.env` ignored. Multiple checkouts must use the same `SKILLS_STATE_DIR` to coordinate reservations; copies create no shared capacity. Codex observations refresh automatically but this runner cannot reserve host-owned Codex turns. Account observations never replace fresh Go admission.
 
 ## Validate changes
 

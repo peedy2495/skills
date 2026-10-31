@@ -95,7 +95,7 @@ test('V2 emergency defaults execute and settle unassessed approved models withou
  const env={...f.env,SKILLS_STATE_DIR:shared,XDG_CONFIG_HOME:configHome};
  const hash=spawnSync('node',['--input-type=module','-e',`import{contextHash}from ${JSON.stringify(new URL('./route-plan.mjs',import.meta.url).href)};import{writeSync}from'node:fs';writeSync(1,contextHash(process.argv[1],'global','2.2.3'));`,f.root],{env,encoding:'utf8'});
  assert.equal(hash.status,0,hash.stderr);c.source.context_hash=hash.stdout.trim();
- const directory=join(configHome,'opencode/model-routing');mkdirSync(directory,{recursive:true});json(join(directory,'catalog.json'),c);
+ json(join(shared,'catalog.json'),c);
  const source=resolve(scripts,'../../..');
  json(join(shared,'consumer.json'),JSON.parse(readFileSync(join(source,'consumer.example.json'))));
  const pool=JSON.parse(readFileSync(join(source,'credits.example.json')));pool.volume.enabled=true;json(join(shared,'credits.json'),pool);
@@ -198,12 +198,12 @@ case 'api --standalone agent.list':response([${JSON.stringify(agent)}]);break;
 default:process.exit(99);
 }
 `,{mode:0o755});
- const env={...f.env,PATH:metadataBin+':'+process.env.PATH,XDG_CONFIG_HOME:join(base,'isolated-v2-installation')};
+ const env={...f.env,PATH:metadataBin+':'+process.env.PATH,XDG_CONFIG_HOME:join(base,'isolated-v2-installation'),SKILLS_STATE_DIR:join(base,'isolated-v2-state')};
  const update=(revision,extra={})=>spawnSync('node',[join(scripts,'refresh-model-catalog.mjs'),'--update','--global','--revision',revision],{cwd:f.root,env:{...env,...extra},encoding:'utf8'});
  const result=update('fake-v2-a');assert.equal(result.status,0,result.stderr);
- const target=join(env.XDG_CONFIG_HOME,'opencode/model-routing/catalog.json'),saved=readFileSync(target,'utf8'),c=JSON.parse(saved);
+ const target=join(env.SKILLS_STATE_DIR,'catalog.json'),saved=readFileSync(target,'utf8'),c=JSON.parse(saved);
  assert.equal(c.source.cli_version,'opencode v2.2.2');assert.equal(c.entries.length,0);assert.deepEqual(c.unassessed.map(e=>e.variant),[null,'custom']);assert(saved.includes('\n  "schema_version": 2,'));
- const revisions=join(env.XDG_CONFIG_HOME,'opencode/model-routing/revisions'),draft=join(f.root,'artifacts/opencode/catalog-update-old');
+ const revisions=join(env.SKILLS_STATE_DIR,'catalog-revisions'),draft=join(f.root,'artifacts/opencode/catalog-update-old');
  for(const directory of [revisions,draft]){mkdirSync(directory,{recursive:true});writeFileSync(join(directory,'invalid.json'),'{obsolete');}
  assert.notEqual(update('fake-v2-b',{V2_TEST_BROKEN_METADATA:'1'}).status,0);assert.equal(readFileSync(target,'utf8'),saved);
  assert(existsSync(revisions)&&existsSync(draft));
@@ -221,6 +221,11 @@ test('V2 global fingerprints permit equivalent projects and detect ancestor/agen
  writeFileSync(join(base,'opencode.json'),'{}\n');assert.notEqual(hash(f.root),baseline);rmSync(join(base,'opencode.json'));
  const external=join(base,'linked-settings.json');writeFileSync(external,'{}\n');symlinkSync(external,join(f.root,'opencode.json'));
  const linked=hash(f.root);writeFileSync(external,'{"warming":false}\n');assert.notEqual(hash(f.root),linked);
+ const store=join(base,'catalog-and-config');mkdirSync(store);writeFileSync(join(store,'opencode.json'),'{}\n');
+ const options={SKILLS_STATE_DIR:store,OPENCODE_CONFIG_DIR:store},sharedHash=hash(f.root,options);
+ writeFileSync(join(store,'catalog.json'),'{"revision":"ignored-metadata"}\n');mkdirSync(join(store,'catalog.json.lock'));
+ assert.equal(hash(f.root,options),sharedHash);
+ writeFileSync(join(store,'opencode.json'),'{"warming":false}\n');assert.notEqual(hash(f.root,options),sharedHash);
 });
 
 test('V2 source/runtime mismatch and invalid inline config block before a routed reservation',()=>{

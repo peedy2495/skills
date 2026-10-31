@@ -45,7 +45,7 @@ export async function configureConsumer() {
     }
     catch { catalogStatus = 'invalid'; }
   }
-  return { status: 'configured', scope: 'all-consumers', pool, routing: 'assessed-then-user-approved-emergency', project_budget: 'optional-restriction',
+  return { status: 'configured', scope: 'all-consumers', pool, routing: 'free-first-with-approved-emergency', project_budget: 'optional-restriction',
     catalog_status: catalogStatus, qualified_models: qualified, approved_emergency_combinations: emergency, emergency_families: consumerConfiguration().emergency_families, ...readiness };
 }
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

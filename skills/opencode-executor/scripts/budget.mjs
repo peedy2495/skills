@@ -73,6 +73,9 @@ export function checkBudget(s, b, reservation, phase, combination = null) {
     for (const k of ['tokens', 'credits']) protection[k] += Math.max(0, b.reserves[name][k] - (usage.phases[name]?.[k] ?? 0));
   }
   for (const k of ['tokens', 'credits']) {
+    // Existing paid spend/reserves cannot exclude a verified zero-charge start.
+    // Token limits and the explicit specialist authorization still apply.
+    if (k === 'credits' && combination?.billing === 'free' && reservation.credits === 0) continue;
     assert(reservation[k] <= b.per_run[k], 'Per-run budget exceeded');
     assert((usage.phases[phase]?.[k] ?? 0) + reservation[k] <= b.phases[phase][k], 'Phase budget exceeded');
     assert(usage.all[k] + reservation[k] + protection[k] <= b.project[k], 'Project budget or protected reserves exceeded');

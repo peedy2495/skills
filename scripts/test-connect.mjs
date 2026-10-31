@@ -58,7 +58,7 @@ test('fresh V2 consumer links sibling checkout and discovery, updates once, pres
     const ignored = spawnSync('git', ['-C', root, 'check-ignore', '--no-index', path], { env, encoding: 'utf8' });
     assert.equal(ignored.status, 0, ignored.stderr + path);
   }
-  const catalog = JSON.parse(readFileSync(join(env.XDG_CONFIG_HOME, 'opencode/model-routing/catalog.json'), 'utf8'));
+  const catalog = JSON.parse(readFileSync(join(env.SKILLS_STATE_DIR, 'catalog.json'), 'utf8'));
   assert.equal(catalog.source.cli_version, 'opencode v2.2.3'); assert.equal(catalog.entries.length, 0); assert.equal(catalog.unassessed.length, 1);
   const commands = before.trim().split('\n').map(JSON.parse); assert(commands.every(args => !args.includes('run') && !args.includes('--refresh')));
 });
@@ -122,6 +122,7 @@ test('conflicts, dangling links, foreign config directories and non-root invocat
 
 test('a fresh Git clone elsewhere connects and preflights without source symlinks, Home skills or the original checkout', () => {
   const isolated = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  delete isolated.SKILLS_STATE_DIR;
   for (const key of Object.keys(isolated)) if (['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT'].includes(key)) delete isolated[key];
   const git = (args, cwd) => {
     const result = spawnSync('git', args, { cwd, env: isolated, encoding: 'utf8' });
@@ -140,6 +141,7 @@ test('a fresh Git clone elsewhere connects and preflights without source symlink
   const relocated = join(base, 'unrelated layout with spaces'); mkdirSync(relocated);
   const cloned = join(relocated, 'skills'); git(['clone', '--no-local', seed, cloned]);
   rmSync(seed, { recursive: true });
+  assert(!existsSync(join(cloned, 'catalog.json')), 'Private catalog must not ship in Git');
   const check = spawnSync(process.execPath, [join(cloned, 'scripts/check-library.mjs')], { env: isolated, encoding: 'utf8' });
   assert.equal(check.status, 0, check.stderr);
   const consumer = join(relocated, 'project'); mkdirSync(consumer); git(['init', '-q'], consumer);
@@ -149,6 +151,11 @@ test('a fresh Git clone elsewhere connects and preflights without source symlink
   assert.equal(readlinkSync(join(consumer, '.agents/skills/cost-efficient-prompts')), '../../skills');
   assert.equal(realpathSync(join(consumer, '.agents/skills/cost-efficient-prompts/SKILL.md')), join(cloned, 'SKILL.md'));
   assert.deepEqual(readdirSync(join(consumer, '.agents/skills')), ['cost-efficient-prompts']);
+  assert(existsSync(join(cloned, 'catalog.json')) && !lstatSync(join(cloned, 'catalog.json')).isSymbolicLink());
+  assert(!existsSync(join(consumer, 'catalog.json')));
+  assert.equal(git(['check-ignore', 'catalog.json'], cloned).trim(), 'catalog.json');
+  const located = spawnSync(process.execPath, ['--input-type=module', '-e', "import{globalCatalogPath}from './skills/skills/opencode-executor/scripts/catalog-store.mjs';import{writeSync}from'node:fs';writeSync(1,globalCatalogPath());"], { cwd: consumer, env: isolated, encoding: 'utf8' });
+  assert.equal(located.status, 0, located.stderr); assert.equal(located.stdout, join(cloned, 'catalog.json'));
   writeFileSync(join(consumer, 'AGENTS.md'), '# Consumer rules\n');
   writeFileSync(join(consumer, '.agents/executor.json'), '{"model":"fixture/model","instructions":["AGENTS.md"]}\n');
   writeFileSync(join(consumer, '.agents/PLAN.md'), '# Goal\nReady: isolated clone check.\n# Relevant Instructions\nnone\n');

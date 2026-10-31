@@ -1,6 +1,11 @@
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { existsSync, realpathSync } from 'node:fs';
+import { stateDirectory } from './consumer-config.mjs';
 
-// Catalog data is local to the OpenCode installation, never the shared skill checkout.
-export const globalCatalogDirectory = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'opencode', 'model-routing');
+// One ignored catalog in the shared checkout, resolved through consumer links.
+// The explicit installation-wide state override also isolates script fixtures.
+export const globalCatalogDirectory = () => {
+  const directory = stateDirectory();
+  return existsSync(directory) ? realpathSync(directory) : directory;
+};
 export const globalCatalogPath = () => join(globalCatalogDirectory(), 'catalog.json');

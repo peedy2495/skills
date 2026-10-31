@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync, lstatSync, readlinkSync, realpathSync, readdirSync, writeSync } from 'node:fs';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -12,11 +12,19 @@ import { withCredits, readCredits } from './credits.mjs';
 import { runtimeVersion, executionOverlay } from './opencode-runtime.mjs';
 import { consumerConfiguration, emergencyApproved } from './consumer-config.mjs';
 
+// Selection semantics are part of the admission contract, independently of
+// catalog metadata. Old pending starts require re-evaluation after this change.
+const policyHash = p => digest(['free-first-suitability-v1', p]);
+
 export function contextHash(root, scope = 'project', version = '1.18.31') {
   const sources = [], visited = new Set(), v2 = runtimeVersion(version).major === 2;
   function scan(path) {
-    // Publishing revisions must not invalidate its own source fingerprint.
-    if (resolve(path) === resolve(globalCatalogDirectory())) return;
+    // The catalog shares a directory with other project/configuration files.
+    // Exclude only its owned metadata, never the whole containing directory.
+    const name = basename(path);
+    if (dirname(resolve(path)) === resolve(globalCatalogDirectory()) &&
+      (/^catalog\.json(?:\.lock|\.[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})?$/.test(name) ||
+        ['catalog-revisions', 'catalog-update'].includes(name) || name.startsWith('catalog-update-'))) return;
     if (!existsSync(path)) return;
     const s = lstatSync(path);
     if (s.isSymbolicLink()) {
@@ -108,8 +116,10 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
       budget = checkBudget(state, b, { tokens, credits }, phase, e);
       if (shared) shared_credits = shared.check(e, { tokens, credits }, phase, null, preview);
     } catch (e) { if (e.code === 'credits_wait') waiting.push(e); continue; }
-    const observed = e.outcomes.find(o => o.task_class === taskClass(t) && o.successes > 0);
-    candidates.push({ entry: e, tier: tier + (isEmergency ? 10 : 0), qualification: isEmergency ? 'user-approved-emergency' : 'assessed', reservation: { tokens, credits }, phase, budget, shared_credits, required, threshold,
+    const observed = e.billing === 'free' ? null : e.outcomes.find(o => o.task_class === taskClass(t) && o.successes > 0);
+    // Billing class precedes evidence class: approved Free must not lose to paid
+    // work solely because its qualification comes from the emergency approval.
+    candidates.push({ entry: e, tier: tier * 2 + (isEmergency ? 1 : 0), qualification: isEmergency ? 'user-approved-emergency' : 'assessed', reservation: { tokens, credits }, phase, budget, shared_credits, required, threshold,
       expected: observed ? observed.credits / observed.successes : null });
   }
   if (!candidates.length && waiting.length) {
@@ -119,13 +129,21 @@ export function select(cfg, state, allowXhigh, fallback = false, shared = null, 
   assert(candidates.length, 'No sufficiently qualified, authorized and affordable catalog combination');
   const tier = Math.min(...candidates.map(x => x.tier));
   const pool = candidates.filter(x => x.tier === tier);
+  const free = pool[0].entry.billing === 'free';
   const observed = pool.every(x => x.expected !== null);
   const allowance = pool.every(x => x.entry.billing === 'go' && x.shared_credits?.volume_basis === 'verified-allowance');
   const price = x => allowance ? x.shared_credits.reservation.volume.monthly : observed ? x.expected : x.shared_credits?.reservation.credits ?? x.reservation.credits;
-  pool.sort((a, z) => price(a) - price(z)
+  const stableOrder = (a, z) => key(a.entry) < key(z.entry) ? -1 : key(a.entry) > key(z.entry) ? 1 : 0;
+  if (free) {
+    // Unknown stays unknown in the catalog/audit. The sentinel only puts missing
+    // evidence after recorded positive scope evidence when otherwise tied.
+    const fit = x => x.required.map(k => x.entry.assessment[k].score ?? -1);
+    const sum = scores => scores.reduce((n, score) => n + score, 0);
+    pool.sort((a, z) => Math.min(...fit(z)) - Math.min(...fit(a)) || sum(fit(z)) - sum(fit(a)) || stableOrder(a, z));
+  } else pool.sort((a, z) => price(a) - price(z)
     || (z.entry.assessment.cost_efficiency.score ?? -1) - (a.entry.assessment.cost_efficiency.score ?? -1)
-    || (key(a.entry) < key(z.entry) ? -1 : key(a.entry) > key(z.entry) ? 1 : 0));
-  return { ...pool[0], cost_basis: allowance ? 'documented-go-allowance-estimate' : observed ? 'observed-total-credits-per-success' : 'estimated-usage; success-cost-unknown' };
+    || stableOrder(a, z));
+  return { ...pool[0], cost_basis: free ? 'free; required-task-suitability; no-monetary-ranking' : allowance ? 'documented-go-allowance-estimate' : observed ? 'observed-total-credits-per-success' : 'estimated-usage; success-cost-unknown' };
 }
 function load(root) {
   const cfg = configuration(root);
@@ -193,7 +211,7 @@ export async function admit(root, allowXhigh = false, previous = null, timing = 
     const e = choice.entry;
     const run_id = randomUUID();
     const decision = { run_id, task_id: cfg.t.task_id, model: e.model, variant: e.variant, variant_hash: e.variant_hash,
-      catalog_revision: cfg.c.revision, catalog_hash: digest(cfg.c), policy_hash: digest(cfg.p), task_hash: digest(cfg.t),
+      catalog_revision: cfg.c.revision, catalog_hash: digest(cfg.c), policy_hash: policyHash(cfg.p), task_hash: digest(cfg.t),
       budget_config_hash: digest(cfg.b), plan_hash: digest(readFileSync(local(root, '.agents/PLAN.md'))), workspace_hash: baseline,
       phase: choice.phase, billing: e.billing, reservation: choice.reservation, budget: choice.budget,
       auto_fallback: cfg.p.auto_fallback,
@@ -213,7 +231,7 @@ export async function claim(root, id, timing = {}) {
   return withFundingWait(root, cfg, id, creditsHash => withCredits(root, cfg.p.credits, shared => transaction(root, cfg.b, async s => {
     assert(creditsHash === null || shared?.hash === creditsHash, 'Shared credits configuration changed while waiting');
     const r = s.runs[id]; assert(r?.state === 'admitted' && s.tasks[r.decision.task_id]?.active === id, 'Start permission already used or unavailable');
-    assert(r.decision.task_hash === digest(cfg.t) && r.decision.catalog_hash === digest(cfg.c) && r.decision.policy_hash === digest(cfg.p) && r.decision.budget_config_hash === digest(cfg.b), 'Start inputs changed');
+    assert(r.decision.task_hash === digest(cfg.t) && r.decision.catalog_hash === digest(cfg.c) && r.decision.policy_hash === policyHash(cfg.p) && r.decision.budget_config_hash === digest(cfg.b), 'Start inputs changed');
     assert(r.decision.workspace_hash === workspaceHash(root), 'Workspace changed after admission');
     assert(r.decision.plan_hash === digest(readFileSync(local(root, '.agents/PLAN.md'))), 'Plan changed after admission');
     const withoutThisReservation = { ...s, runs: { ...s.runs } }; delete withoutThisReservation.runs[id];

@@ -133,7 +133,7 @@ function obsoleteArtifacts(target, artifactRoots) {
   const directory = dirname(target);
   for (const name of readdirSync(directory)) {
     const suffix = name.slice(basename(target).length + 1);
-    if ((basename(target) === 'catalog.json' && name === 'revisions') || owned(name) || (name.startsWith(`${basename(target)}.`) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(suffix))) paths.add(join(directory, name));
+    if (owned(name) || (name.startsWith(`${basename(target)}.`) && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(suffix))) paths.add(join(directory, name));
   }
   for (const root of new Set(artifactRoots)) {
     const scratch = local(root, 'artifacts/opencode');
