@@ -6,7 +6,7 @@ Read for integration/policy maintenance; normal planning needs only [routing-tas
 
 Project JSON: schema 1; global catalog: schema 2. Unknown fields/invalid values fail closed; executable SSOT: [routing-schema.mjs](../scripts/routing-schema.mjs). General facts/confirmed variants/curated assessments/advertised prices: ignored `catalog.json` at the shared library root (`skills/catalog.json` through consumer links). Only current versioned JSON persists; successful explicit updates prune old artifacts per [catalog-update.md](catalog-update.md). Private shared defaults and provider funding live in the [installation pool](../../../references/provider-pool.md), never in distributed Git data or per-project copies. Consumers own instructions/task features/run logs and optional tighter limits. Routed mode ignores legacy model/effort and rejects CLI overrides.
 
-Run `node scripts/configure-consumer.mjs` once from the library. Ignored `consumer.json` supplies standing shared approvals without per-project model IDs. Qualification and account capacity are independent gates.
+Run `node scripts/configure-consumer.mjs` once from the library. Ignored `config/consumer.json` supplies standing shared approvals without per-project model IDs. Qualification and account capacity are independent gates.
 
 `emergency_families:["deepseek","muse","glm"]` records the user's baseline approval separately from measured quality. Only CLI-present `opencode`/`opencode-go` IDs matching these families, verified billing/prices, tools, context/output limits and existing authorization qualify. Keep all original scores/provenance; explicit required-axis failure (0) excludes a model. Eligible candidates order Free → Go → authorized paid Console; within each billing class, assessed candidates precede emergency candidates. Approved emergency Free therefore precedes assessed Go. Paid emergency starts require an enabled shared monetary cap; this does not enable extra Go wallet usage, purchase credits or change account privacy/authentication. Local `emergency_families:[]` disables emergency routing; subsets only. Audit marks `user-approved-emergency`; unknown quality is never called locally verified. No catalogue or no matching eligible CLI entry still prevents execution; no IDs/variants are invented.
 
@@ -30,7 +30,7 @@ The shared pool is mandatory in common routing. Free requires no Go funding; Go 
 
 ## Explicit catalog update only
 
-[catalog-update.md](catalog-update.md) owns discovery authorization, including explicit first connection, metadata-only capture and curated updates. CLI metadata alone never populates public quality assessments. Public-source research is part of explicit curated updates; it applies equally to Free and paid models, with provenance retained and provisional use requiring policy permission. Load [catalog-assessments.md](catalog-assessments.md) only for quality/publication assessments. Normal routing reads stored JSON only.
+[catalog-update.md](catalog-update.md) owns discovery authorization. An explicit catalog update includes public research for missing assessments, equally for Free and paid; first connection or explicit metadata-only capture skips it. Reuse existing valid assessments. Publications remain provisional and need policy permission. Normal routing reads stored JSON only.
 
 ## Atomic admission, execution and audit
 

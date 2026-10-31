@@ -15,6 +15,7 @@ function walk(path) {
   }
 }
 for (const path of ['SKILL.md', 'README.md', 'AGENTS.md', 'skills', 'references', 'scripts']) walk(resolve(root, path));
+for (const name of ['consumer.example.json', 'credits.example.json', '.env.example']) walk(resolve(root, 'config', name));
 const expected = ['SKILL.md', 'skills/llm-usage/SKILL.md', 'skills/opencode-executor/SKILL.md', 'skills/skill-maintenance/SKILL.md'].sort();
 if (JSON.stringify(entries.sort()) !== JSON.stringify(expected)) throw Error('Only efficiency, execution, quota and this project maintenance belong here');
 const broken = [];

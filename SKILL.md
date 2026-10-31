@@ -14,5 +14,6 @@ Load one conditional route:
 - Missing/broken integration: [setup](README.md#connect-a-project); first connection captures only OpenCode model metadata once.
 - Substantial authorized delegation: [executor](skills/opencode-executor/SKILL.md); configured routing selects eligible model/variant within budgets.
 - Before a direct work package or on quota requests: [usage](skills/llm-usage/SKILL.md). Delegated starts refresh shared provider observations in the runner; do not query twice. No manual quota maintenance.
+- Explicit model catalog update: [catalog maintenance](skills/opencode-executor/references/catalog-update.md); capture inventory, then research missing assessments. Reuse valid ratings; metadata-only capture requires that scope.
 
 Implementation methods, domain skills and check commands come exclusively from the consumer. Keep setup, account and routing administration out of execution prompts. Report outcomes/check evidence/limits briefly; no guaranteed cache hits, measured savings or extra spending implied.

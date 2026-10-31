@@ -1,8 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { configureConsumer } from './configure-consumer.mjs';
@@ -15,7 +14,8 @@ import { documentedAllowances } from '../skills/opencode-executor/scripts/go-all
 import { globalCatalogPath } from '../skills/opencode-executor/scripts/catalog-store.mjs';
 
 const source = fileURLToPath(new URL('..', import.meta.url));
-const scratch = mkdtempSync(join(tmpdir(), 'shared-provider-test-'));
+const fixtures = join(source, 'artifacts/opencode/tmp'); mkdirSync(fixtures, { recursive: true });
+const scratch = mkdtempSync(join(fixtures, 'shared-provider-test-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const bin = join(scratch, 'bin'); mkdirSync(bin);
 writeFileSync(join(bin, 'opencode'), '#!/bin/sh\nprintf "1.18.31\\n"\n', { mode: 0o755 });
@@ -36,8 +36,8 @@ function entry(model, billing) {
   evidence: 'Fixture only', requires_xhigh: false, outcomes: [] };
 }
 async function fixture(entries = [entry('opencode-go/fixture', 'go')]) {
- const base = join(scratch, `installation ${serial++}`), shared = join(base, 'shared');
- mkdirSync(shared, { recursive: true }); process.env.SKILLS_STATE_DIR = shared; process.env.XDG_CONFIG_HOME = join(base, 'config');
+ const base = join(scratch, `installation ${serial++}`), installation = join(base, 'shared'), shared = join(installation, 'config');
+ mkdirSync(shared, { recursive: true }); process.env.SKILLS_STATE_DIR = installation; process.env.XDG_CONFIG_HOME = join(base, 'config');
  await configureConsumer();
  const file = join(shared, 'credits.json'), d = JSON.parse(readFileSync(file));
  d.billing = { enabled: true, period: d.billing.period, limit_micro_usd: 300, per_run_limit_micro_usd: 300, reserves_micro_usd: { repair: 0, validation: 0 } };
@@ -303,4 +303,44 @@ test('loss of the global ledger cannot silently create new credit', async () => 
  await assert.rejects(configureConsumer(), /ledger missing/); assert(!existsSync(f.file));
  const previous = process.env.SKILLS_STATE_DIR; process.env.SKILLS_STATE_DIR = 'relative-project-state';
  try { assert.throws(() => consumerConfiguration(), /absolute/); } finally { process.env.SKILLS_STATE_DIR = previous; }
+});
+
+test('configuration ignores consumer cwd and Home/XDG; external roots and symlink escapes fail before writes', async () => {
+ const f = await fixture(), previous = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+ const foreign = mkdtempSync('/tmp/skills-foreign-state-');
+ try {
+  process.env.HOME = foreign; process.env.XDG_CONFIG_HOME = foreign;
+  assert.equal(consumerConfiguration().credits, f.file);
+  assert(!existsSync(join(foreign, 'config')));
+  const ledger = readFileSync(f.file); writeFileSync(join(foreign, 'credits.json'), ledger);
+  rmSync(f.file); symlinkSync(join(foreign, 'credits.json'), f.file);
+  assert.throws(() => consumerConfiguration(), /local file/);
+  await assert.rejects(configureConsumer(), /local file/);
+  rmSync(f.file); writeFileSync(f.file, ledger);
+  process.env.SKILLS_STATE_DIR = foreign;
+  await assert.rejects(configureConsumer(), /inside this skills checkout/);
+  assert(!existsSync(join(foreign, 'config')));
+  const alias = join(f.base, 'foreign-state'); symlinkSync(foreign, alias);
+  process.env.SKILLS_STATE_DIR = alias;
+  await assert.rejects(configureConsumer(), /symlinks/);
+  process.env.SKILLS_STATE_DIR = join(f.base, 'escape-through-parent'); mkdirSync(process.env.SKILLS_STATE_DIR);
+  symlinkSync(foreign, join(process.env.SKILLS_STATE_DIR, 'config'));
+  await assert.rejects(configureConsumer(), /symlinks/);
+  assert(!existsSync(join(foreign, 'consumer.json')));
+ } finally {
+  process.env.SKILLS_STATE_DIR = dirname(f.shared);
+  for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  rmSync(foreign, { recursive: true, force: true });
+ }
+});
+
+test('legacy root configuration blocks fresh setup and routing without resetting reservations', async () => {
+ const f = await fixture(), installation = dirname(f.shared), ledger = readFileSync(f.file);
+ // A partially moved installation must not appear unconfigured or gain a new pool.
+ rmSync(join(f.shared, 'consumer.json')); rmSync(f.file);
+ writeFileSync(join(installation, 'credits.json'), ledger);
+ assert.throws(() => consumerConfiguration(), /Legacy root configuration/);
+ await assert.rejects(configureConsumer(), /Legacy root configuration/);
+ assert.deepEqual(readFileSync(join(installation, 'credits.json')), ledger);
+ assert(!existsSync(f.file)); assert(!existsSync(join(f.shared, 'consumer.json')));
 });

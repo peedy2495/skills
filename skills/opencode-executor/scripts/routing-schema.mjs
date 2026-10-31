@@ -53,7 +53,7 @@ export function catalog(c) {
   const seen = new Set();
   const pending = c.unassessed ?? [];
   for (const e of [...c.entries, ...pending]) {
-    object(e, ['model', 'variant', 'variant_hash', 'context', 'output', 'tool_use', 'billing', 'rates', 'assessment', 'evidence', 'requires_xhigh', 'outcomes'], ['input', 'pricing', 'billing_evidence']);
+    object(e, ['model', 'variant', 'variant_hash', 'context', 'output', 'tool_use', 'billing', 'rates', 'assessment', 'evidence', 'requires_xhigh', 'outcomes'], ['input', 'pricing', 'billing_evidence', 'research']);
     assert(typeof e.model === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./:-]+$/.test(e.model), 'Invalid model ID');
     assert(e.variant === null || (text(e.variant) && e.variant.length <= 100 && !e.variant.includes('#')), 'Invalid variant ID');
     assert(!seen.has(key(e)), 'Duplicate model/variant'); seen.add(key(e));
@@ -61,6 +61,12 @@ export function catalog(c) {
     assert(e.input === undefined || e.input === null || integer(e.input), 'Invalid input limit');
     assert(['free', 'go', 'paid', 'unknown'].includes(e.billing) && typeof e.requires_xhigh === 'boolean' && text(e.evidence), 'Invalid qualification');
     assert(e.billing_evidence === undefined || text(e.billing_evidence), 'Invalid billing evidence');
+    if (e.research !== undefined) {
+      object(e.research, ['status', 'checked_at', 'reason']);
+      assert(['reviewed', 'blocked'].includes(e.research.status) && text(e.research.reason), 'Invalid research completion');
+      assert(/^\d{4}-\d{2}-\d{2}$/.test(e.research.checked_at) && Number.isFinite(Date.parse(e.research.checked_at)) &&
+        new Date(e.research.checked_at).toISOString().slice(0, 10) === e.research.checked_at, 'Invalid research date');
+    }
     if (e.rates !== null) {
       object(e.rates, ['input', 'output', 'cache_read', 'cache_write']);
       assert(Object.values(e.rates).every(integer), 'Invalid rates');

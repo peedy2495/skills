@@ -8,7 +8,8 @@ import { catalog, digest, axes, phases, configuration, taskClass, scoreFromRevie
 import { select, contextHash, admit, claim, finish } from './route-plan.mjs';
 import { readState, checkBudget, totals, transaction } from './budget.mjs';
 import { collectUsage } from './collect-usage.mjs';
-import { parseModels, buildCatalog, cliBilling, publishCatalog } from './refresh-model-catalog.mjs';
+import { parseModels, buildCatalog, cliBilling, publishCatalog, initialAssessments, enrichAssessments } from './refresh-model-catalog.mjs';
+import { assessmentWork } from './assessment-work.mjs';
 import { globalCatalogDirectory, globalCatalogPath } from './catalog-store.mjs';
 import { withCredits, normalizeUsage, validateCredits, usageURL } from './credits.mjs';
 
@@ -806,6 +807,38 @@ test('versioned review replays each score and rejects unsupported scopes and sou
   assert.throws(() => scoreFromReview(review('S2'), [{ ...sources[0], variant_match: 'unmapped' }]));
   assert.throws(() => scoreFromReview(review('S3'), [{ ...sources[0], variant_match: 'general' }]));
   assert.throws(() => scoreFromReview(review('S3'), [{ ...sources[0], tested_configuration: null }]));
+});
+test('research work skips prior ratings and documented gaps; scoped V2 reuse invalidates only changed bindings', () => {
+  const source = { kind: 'opencode-cli', cli_version: '2.2.3', captured_at: '2026-10-31T00:00:00Z', context_hash: 'before', metadata_hash: 'fixture', scope: 'global' };
+  const metadata = () => ({ options: { contract: 'opencode-v2', provider: { id: 'fixture', endpoint: 'fixture' } }, variants: { low: { effort: 'low' }, high: { effort: 'high' } },
+    capabilities: { toolcall: true }, limit: { context: 10000, output: 1000 } });
+  const models = new Map([['fixture/a', metadata()], ['fixture/b', metadata()]]);
+  const initial = initialAssessments(models, 'research-first', null, source, {});
+  initial.annotations.entries[0].assessment = assessment(2);
+  initial.annotations.entries.find(e => e.model === 'fixture/a' && e.variant === 'low').research = { status: 'blocked', checked_at: '2026-10-31', reason: 'Official documentation checked; identity of this configured variant is not established.' };
+  initial.annotations.entries.find(e => e.model === 'fixture/a' && e.variant === 'low').evidence = 'Curated source-gap facts survive unknown billing and null grades.';
+  const previous = buildCatalog('', models, initial.annotations, source);
+  const work = assessmentWork(previous);
+  assert.equal(work.reviewed, 2); assert.equal(work.blocked, 1); assert.equal(work.pending, 4);
+  assert.equal(work.models[0].combinations.length, 1); // one group per model, not seven axes
+  const same = initialAssessments(models, 'research-retained', previous, { ...source, context_hash: 'unrelated-config-change' }, {}).annotations;
+  assert.deepEqual(same.entries[0].assessment, previous.entries[0].assessment);
+  assert.deepEqual(same.entries[2].research, initial.annotations.entries[2].research);
+  assert.equal(same.entries[2].evidence, initial.annotations.entries[2].evidence);
+  const replacement = { ...same, entries: [{ ...same.entries[0], assessment: assessment(3) }] };
+  assert.throws(() => enrichAssessments(same, replacement), /Existing assessment is protected/);
+  assert.equal(enrichAssessments(same, replacement, true).entries[0].assessment.implementation.score, 3);
+  models.get('fixture/a').variants.low.effort = 'different';
+  const changed = initialAssessments(models, 'research-changed', previous, source, {}).annotations;
+  assert.deepEqual(changed.entries[0].assessment, same.entries[0].assessment);
+  assert.equal(changed.entries[2].research, undefined);
+  assert.equal(assessmentWork(buildCatalog('', models, changed, source)).pending, 5);
+  assert(initialAssessments(models, 'runtime-changed', previous, { ...source, cli_version: '2.2.4' }, {}).annotations.entries.every(e => !e.research && e.assessment.implementation.score === null));
+  models.get('fixture/a').options = {}; // V1 cannot bind effective provider configuration independently.
+  const v1 = initialAssessments(models, 'v1-draft', null, source, {});
+  v1.annotations.entries[0].assessment = assessment(2);
+  const oldV1 = buildCatalog('', models, v1.annotations, source);
+  assert.equal(initialAssessments(models, 'v1-changed', oldV1, { ...source, context_hash: 'changed' }, {}).annotations.entries[0].assessment.implementation.score, null);
 });
 test('catalog review rejects changed scores, missing provenance and false local observations', () => {
   const c = configuration(fixture()).c;

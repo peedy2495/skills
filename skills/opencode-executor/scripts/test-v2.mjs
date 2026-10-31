@@ -85,7 +85,7 @@ test('both supported V2 releases execute routed exact variants and safe fallback
 });
 
 test('V2 emergency defaults execute and settle unassessed approved models without a project model, policy or budget',()=>{
- const f=fixture(true,'2.2.3'),shared=join(base,`global-state ${serial++}`),configHome=join(shared,'config');mkdirSync(shared);
+ const f=fixture(true,'2.2.3'),shared=join(base,`global-state ${serial++}`),configHome=join(shared,'native-config');mkdirSync(join(shared,'config'),{recursive:true});
  json(join(f.root,'.agents/executor.json'),{instructions:['AGENTS.md']});
  const c=JSON.parse(readFileSync(join(f.root,'.agents/model-catalog.json')));
  c.schema_version=2;c.source.scope='global';c.unassessed=[];c.exclusions=[];
@@ -97,11 +97,11 @@ test('V2 emergency defaults execute and settle unassessed approved models withou
  assert.equal(hash.status,0,hash.stderr);c.source.context_hash=hash.stdout.trim();
  json(join(shared,'catalog.json'),c);
  const source=resolve(scripts,'../../..');
- json(join(shared,'consumer.json'),JSON.parse(readFileSync(join(source,'consumer.example.json'))));
- const pool=JSON.parse(readFileSync(join(source,'credits.example.json')));pool.volume.enabled=true;json(join(shared,'credits.json'),pool);
+ json(join(shared,'config/consumer.json'),JSON.parse(readFileSync(join(source,'config/consumer.example.json'))));
+ const pool=JSON.parse(readFileSync(join(source,'config/credits.example.json')));pool.volume.enabled=true;json(join(shared,'config/credits.json'),pool);
  const result=f.run([],{SKILLS_STATE_DIR:shared,XDG_CONFIG_HOME:configHome});assert.equal(result.status,0,result.stderr+result.stdout);
  assert.deepEqual(f.calls().map(x=>[x.model,x.variant]),[['opencode/deepseek-fixture-free','careful']]);
- const state=JSON.parse(readFileSync(join(shared,'credits.json')));
+ const state=JSON.parse(readFileSync(join(shared,'config/credits.json')));
  assert.equal(state.state.codex.status,'unavailable');assert.equal(state.state.last_error.code,'usage_key');
  assert.equal(Object.values(state.state.runs).length,1);assert(Object.values(state.state.runs).every(r=>r.state==='finished'&&r.usage_credits===0));
  assert.equal(existsSync(join(f.root,'.agents/budget.json')),false);

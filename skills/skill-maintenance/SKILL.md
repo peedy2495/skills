@@ -7,7 +7,7 @@ description: Extend or maintain this cost-efficiency skill project and validate 
 
 Work directly in this checkout; preserve existing work. This project owns only economical prompt execution and its maintenance. Product-specific behavior, methods and skills belong to their consumer. No Home copies, imported skill catalogues, private paths or repository symlinks.
 
-Inspect affected entrypoints, callers, references, templates/scripts and actual handoffs. Load adjacent skills only for concrete overlap. Keep one normative source per rule; deterministic work uses existing helpers. Consumer discovery exposes only the efficiency entrypoint, never this maintenance workflow.
+Inspect affected entrypoints, callers, references, templates/scripts and actual handoffs. Configuration/examples follow the checkout-local [layout](../../README.md#connect-a-project); active configuration stays Git-ignored. Load adjacent skills only for concrete overlap. Keep one normative source per rule; deterministic work uses existing helpers. Consumer discovery exposes only the efficiency entrypoint, never this maintenance workflow.
 
 Before completing every skill change, inspect the whole context using these checks and the shared [context policy](../../references/context.md):
 

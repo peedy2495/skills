@@ -32,7 +32,7 @@ default: process.exit(99);
 }
 `, { mode: 0o755 });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENCODE_') && !key.startsWith('CODEX_')));
-Object.assign(env, { PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: join(base, 'config'), SKILLS_STATE_DIR: join(base, 'isolated-shared-state'), CONNECT_TEST_CALLS: calls });
+Object.assign(env, { PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: join(base, 'config'), SKILLS_STATE_DIR: join(library, 'artifacts/isolated-shared-state'), CONNECT_TEST_CALLS: calls });
 let serial = 0;
 function fixture() {
   const root = join(base, `consumer ${serial++}`); mkdirSync(root);
@@ -76,11 +76,11 @@ test('failed initialization keeps retryable links and no success marker', () => 
 });
 
 test('different consumer links resolve the same provider pool without local balances', () => {
-  const first = fixture(), second = fixture(), shared = join(base, 'shared-providers'); mkdirSync(shared);
-  cpSync(join(source, 'consumer.example.json'), join(shared, 'consumer.json'));
-  cpSync(join(source, 'credits.example.json'), join(shared, 'credits.json'));
+  const first = fixture(), second = fixture(), installation = join(library, 'artifacts/shared-providers'), shared = join(installation, 'config'); mkdirSync(shared, { recursive: true });
+  cpSync(join(source, 'config/consumer.example.json'), join(shared, 'consumer.json'));
+  cpSync(join(source, 'config/credits.example.json'), join(shared, 'credits.json'));
   for (const root of [first, second]) symlinkSync('../skills', join(root, 'skills'));
-  const read = root => spawnSync(process.execPath, ['--input-type=module', '-e', "import {consumerConfiguration} from './skills/skills/opencode-executor/scripts/consumer-config.mjs'; import{writeSync}from'node:fs';writeSync(1,consumerConfiguration().credits);"], { cwd: root, env: { ...env, SKILLS_STATE_DIR: shared }, encoding: 'utf8' });
+  const read = root => spawnSync(process.execPath, ['--input-type=module', '-e', "import {consumerConfiguration} from './skills/skills/opencode-executor/scripts/consumer-config.mjs'; import{writeSync}from'node:fs';writeSync(1,consumerConfiguration().credits);"], { cwd: root, env: { ...env, SKILLS_STATE_DIR: installation }, encoding: 'utf8' });
   for (const root of [first, second]) {
     const result = read(root); assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, join(shared, 'credits.json'));
     assert(!existsSync(join(root, 'credits.json')));
@@ -122,6 +122,8 @@ test('conflicts, dangling links, foreign config directories and non-root invocat
 
 test('a fresh Git clone elsewhere connects and preflights without source symlinks, Home skills or the original checkout', () => {
   const isolated = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const home = join(base, 'empty-home'); mkdirSync(home);
+  isolated.HOME = home; isolated.XDG_CONFIG_HOME = join(home, '.config');
   delete isolated.SKILLS_STATE_DIR;
   for (const key of Object.keys(isolated)) if (['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT'].includes(key)) delete isolated[key];
   const git = (args, cwd) => {
@@ -161,4 +163,16 @@ test('a fresh Git clone elsewhere connects and preflights without source symlink
   writeFileSync(join(consumer, '.agents/PLAN.md'), '# Goal\nReady: isolated clone check.\n# Relevant Instructions\nnone\n');
   const preflight = spawnSync('bash', [join(consumer, 'skills/skills/opencode-executor/scripts/execute-plan.sh'), '--check'], { cwd: consumer, env: isolated, encoding: 'utf8' });
   assert.equal(preflight.status, 0, preflight.stderr);
+  for (const name of ['consumer.example.json', 'credits.example.json', '.env.example']) {
+    const path = 'config/' + name;
+    assert(existsSync(join(cloned, path)));
+    assert.equal(spawnSync('git', ['check-ignore', path], { cwd: cloned, env: isolated }).status, 1);
+  }
+  for (const name of ['consumer.json', 'credits.json', '.env']) assert(!existsSync(join(cloned, 'config', name)));
+  const setup = spawnSync(process.execPath, [join(consumer, 'skills/scripts/configure-consumer.mjs')], { cwd: consumer, env: isolated, encoding: 'utf8' });
+  assert.equal(setup.status, 0, setup.stderr); assert.equal(JSON.parse(setup.stdout).pool, join(cloned, 'config/credits.json'));
+  for (const path of ['config/consumer.json', 'config/credits.json', 'config/.env', 'config/.env.local', 'config/credits.json.lock/owner', 'config/credits.json.tmp', 'config/custom.json']) {
+    assert.equal(git(['check-ignore', path], cloned).trim(), path);
+  }
+  assert.deepEqual(readdirSync(home), [], 'This library must not create Home configuration or discovery links');
 });

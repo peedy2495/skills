@@ -16,7 +16,7 @@ export async function configureConsumer() {
   if (existsSync(config)) consumerConfiguration();
   const readiness = await withLock(`${pool}.lock`, () => {
     if (existsSync(pool)) assert(lstatSync(pool).isFile() && !lstatSync(pool).isSymbolicLink() && lstatSync(pool).nlink === 1, 'Shared provider state must be a local file');
-    const d = validateCredits(JSON.parse(readFileSync(existsSync(pool) ? pool : resolve(source, 'credits.example.json'), 'utf8')));
+    const d = validateCredits(JSON.parse(readFileSync(existsSync(pool) ? pool : resolve(source, 'config/credits.example.json'), 'utf8')));
     assert(Object.values(d.state.runs).every(r => r.state === 'finished' && r.usage_credits !== null), 'Reconcile active or unknown shared runs before enabling global funding');
     d.volume.enabled = true; d.volume.wait_for_reset = true; d.volume.token_price_fallback ??= true;
     for (const [model, evidence] of Object.entries(documentedAllowances())) {
@@ -29,10 +29,10 @@ export async function configureConsumer() {
     return { verified_go_allowance_models: Object.values(d.volume.allowances).filter(a => Date.now() <= Date.parse(`${a.valid_until}T23:59:59.999Z`)).length,
       extra_credit_budget_micro_usd: d.extra_credit_budget_micro_usd };
   });
-  if (!existsSync(config)) writeFileSync(config, readFileSync(resolve(source, 'consumer.example.json')), { flag: 'wx', mode: 0o600 });
+  if (!existsSync(config)) writeFileSync(config, readFileSync(resolve(source, 'config/consumer.example.json')), { flag: 'wx', mode: 0o600 });
   else {
     const g = JSON.parse(readFileSync(config, 'utf8'));
-    if (g.emergency_families === undefined) { g.emergency_families = JSON.parse(readFileSync(resolve(source, 'consumer.example.json'))).emergency_families; atomicJSON(config, g, 2); }
+    if (g.emergency_families === undefined) { g.emergency_families = JSON.parse(readFileSync(resolve(source, 'config/consumer.example.json'))).emergency_families; atomicJSON(config, g, 2); }
   }
   consumerConfiguration();
   let catalogStatus = 'missing', qualified = 0, emergency = 0;

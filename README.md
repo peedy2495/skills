@@ -11,7 +11,17 @@ node scripts/configure-consumer.mjs
 node scripts/provider-status.mjs --refresh
 ```
 
-All projects then consume the same provider remainder and shared reservations. The shared model catalog is ignored `./catalog.json` in this checkout, also reached as `skills/catalog.json` from consumers. Ignored `consumer.json` supplies common routing defaults; [provider pool](references/provider-pool.md) owns scope, setup and limits. No project receives a separate credit allocation. DeepSeek, Muse and GLM are approved emergency families; missing quality scores or quota conversions alone never prevent their emergency starts. Unknown provider capacity remains unknown.
+All projects then consume the same provider remainder and shared reservations. The shared model catalog is ignored `./catalog.json` in this checkout, also reached as `skills/catalog.json` from consumers. Ignored `config/consumer.json` supplies common routing defaults; [provider pool](references/provider-pool.md) owns scope, setup and limits. No project receives a separate credit allocation. DeepSeek, Muse and GLM are approved emergency families; missing quality scores or quota conversions alone never prevent their emergency starts. Unknown provider capacity remains unknown.
+
+All library configuration lives in this checkout's `config/`, independently of consumer cwd and Home/XDG settings:
+
+| Active (Git-ignored) | Distributed example |
+| --- | --- |
+| `config/consumer.json` | [consumer.example.json](config/consumer.example.json) |
+| `config/credits.json` | [credits.example.json](config/credits.example.json) |
+| `config/.env` | [.env.example](config/.env.example) |
+
+Only these examples are distributed from `config/`; locks, temporary files and other active configuration stay ignored. No library configuration or discovery references belong in Home. Existing root configuration must be moved intact into `config/` with managed processes stopped; do not replace ledgers or clear unresolved reservations. Legacy root files block setup/routing rather than create a new pool. Native Codex/OpenCode account/configuration files remain owned by those applications.
 
 Clone this repository beside the consumer, then run from the consumer Git root:
 
@@ -46,7 +56,7 @@ bash skills/skills/opencode-executor/scripts/execute-plan.sh
 
 `--check` is read-only without inference. xhigh requires explicit authorization and `--allow-xhigh`. Stable selected constraints are injected once before changing task data. Current report: `.agents/IMPLEMENTATION_REPORT.md`; scratch/logs: consumer `artifacts/opencode/`. Preserve accounting/audit state. Enabled routing alone owns one verified safe technical fallback; never retry work with unknown effects.
 
-Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared funding](skills/opencode-executor/references/credits.md). Keep installation-local `catalog.json`, its locks/temporary files, `consumer.json`, `credits.json` and `.env` ignored. Multiple checkouts must use the same `SKILLS_STATE_DIR` to coordinate reservations; copies create no shared capacity. Codex observations refresh automatically but this runner cannot reserve host-owned Codex turns. Account observations never replace fresh Go admission.
+Administration only: [model routing/budgets](skills/opencode-executor/references/model-routing.md), [V1/V2 runtime](skills/opencode-executor/references/opencode-v2.md), [usage](skills/llm-usage/SKILL.md), [shared funding](skills/opencode-executor/references/credits.md). All consumers must link the same checkout to coordinate reservations; separate checkouts do not share a ledger. Codex observations refresh automatically but this runner cannot reserve host-owned Codex turns. Account observations never replace fresh Go admission.
 
 ## Validate changes
 

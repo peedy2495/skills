@@ -4,13 +4,13 @@ Read only for shared funding setup/admission failures. [Common configuration](..
 
 ## One local file across consumers
 
-Ignored shared-root `credits.json`/`.env`; adapter requires `OPENCODE_GO_API_KEY`. **Only script processes `.env`; agents use sanitized output, never open/display/load it into context.** Preserve configured dotenv. Use inference provider's Go account/key; adapter never inspects/copies CLI credentials and cannot prove independent CLI auth matches. Never shell-source dotenv/export it into catalog refresh. Quotes/optional comment supported; substitutions/duplicate keys/external dotenv symlinks rejected. No token in arguments/audit/status/errors.
+Ignored checkout-local `config/credits.json`/`config/.env`; adapter requires `OPENCODE_GO_API_KEY`. **Only script processes `.env`; agents use sanitized output, never open/display/load it into context.** Preserve configured dotenv. Use inference provider's Go account/key; adapter never inspects/copies CLI credentials and cannot prove independent CLI auth matches. Never shell-source dotenv/export it into catalog refresh. Quotes/optional comment supported; substitutions/duplicate keys/external dotenv symlinks rejected. No token in arguments/audit/status/errors.
 
-Initial setup: `node scripts/configure-consumer.mjs` preserves existing state and enables live Go checks/reset waiting/token-price fallback. It imports current public [conversion evidence](../../../references/opencode-go-allowances.json) without replacing custom allowances. Missing state uses [credits.example.json](../../../credits.example.json). Set the key locally in [.env.example](../../../.env.example)'s format; restrict files to owner. The example alone enables neither check and authorizes no spending.
+Initial setup: `node scripts/configure-consumer.mjs` preserves existing state and enables live Go checks/reset waiting/token-price fallback. It imports current public [conversion evidence](../../../references/opencode-go-allowances.json) without replacing custom allowances. Missing state uses [credits.example.json](../../../config/credits.example.json). Set the key locally in [.env.example](../../../config/.env.example)'s format; restrict files to owner. The example alone enables neither check and authorizes no spending.
 
-Obtain a **personal** key in the [OpenCode Console](https://opencode.ai/console/): **Account → Personal API keys → Add API key**, choosing the workspace with the existing Go subscription. Save it locally as `OPENCODE_GO_API_KEY=your_key` in the shared-root `.env`; never send it through chat or command arguments. Go Teams does not cover service accounts. Sources checked 2026-10-30: [personal API keys](https://opencode.ai/v2/docs/console/api/#personal-api-keys), [Go account scope](https://opencode.ai/v2/docs/console/go/). This configures the usage adapter only; it does not connect/change CLI inference authentication or enable spending gates. The implementation-specific usage endpoint may reject a key; report the fixed error and keep quotas unknown rather than assuming compatibility.
+Obtain a **personal** key in the [OpenCode Console](https://opencode.ai/console/): **Account → Personal API keys → Add API key**, choosing the workspace with the existing Go subscription. Save it locally as `OPENCODE_GO_API_KEY=your_key` in the checkout-local `config/.env`; never send it through chat or command arguments. Go Teams does not cover service accounts. Sources checked 2026-10-30: [personal API keys](https://opencode.ai/v2/docs/console/api/#personal-api-keys), [Go account scope](https://opencode.ai/v2/docs/console/go/). This configures the usage adapter only; it does not connect/change CLI inference authentication or enable spending gates. The implementation-specific usage endpoint may reject a key; report the fixed error and keep quotas unknown rather than assuming compatibility.
 
-Common setup resolves the **same canonical credits.json** independently of project paths; local policies cannot substitute another file. Legacy explicit consumer paths may use `"credits":"skills/credits.json"`. Multiple checkouts need one shared `SKILLS_STATE_DIR`; copies share no reservations. Embedding/ignores: [README.md](../../../README.md), “Connect a project”.
+Common setup resolves the **same canonical credits.json** independently of project paths; local policies cannot substitute another file. Legacy explicit consumer paths may use `"credits":"skills/config/credits.json"`. All consumers link the same checkout; copies share no reservations. Embedding/ignores: [README.md](../../../README.md), “Connect a project”.
 
 `credits.json`: readable two-space JSON, config plus compact persistent `state`, atomically replaced; never edit during managed runs. Schema/API adapter: [credits.mjs](../scripts/credits.mjs). Retain normalized telemetry even on denied starts. Optional `state.last_error`: fixed code/timestamp only; previous successful snapshot stays dated, never becomes invented zero.
 
@@ -55,8 +55,8 @@ Shared file: hashed consumer ID, run/model/variant/phase references, reservation
 Cached status or explicit telemetry refresh:
 
 ```sh
-node skills/opencode-executor/scripts/credits.mjs status credits.json
-node skills/opencode-executor/scripts/credits.mjs status credits.json --refresh
+node skills/opencode-executor/scripts/credits.mjs status config/credits.json
+node skills/opencode-executor/scripts/credits.mjs status config/credits.json --refresh
 ```
 
 Refresh queries usage only, never inference/catalog update. Both emit agent-readable JSON; `refreshed=false` means cached. API failure: `status=unavailable`, fixed `last_error`, dated previous snapshot if any, exit 75. Invalid config/arguments: fixed JSON error, never local-input dump.

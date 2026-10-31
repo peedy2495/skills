@@ -1,19 +1,34 @@
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assert, object, key } from './routing-schema.mjs';
 
 export const emergencyApproved = (entry, families = []) => /^(opencode|opencode-go)\//.test(entry.model) &&
   families.some(f => entry.model.split('/')[1].startsWith(`${f}-`)) && ['free', 'go', 'paid'].includes(entry.billing);
 
-// One installation, shared by every consumer. An explicit installation-wide
-// override also lets independent checkouts use the same pool; never copy state.
+const library = realpathSync(fileURLToPath(new URL('../../..', import.meta.url)));
+const contained = path => { const r = relative(library, path); return r === '' || (!isAbsolute(r) && r !== '..' && !r.startsWith('../')); };
+function localPath(path) {
+  assert(contained(path), 'Shared state must stay inside this skills checkout');
+  let ancestor = path;
+  while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  assert(contained(realpathSync(ancestor)), 'Shared state must not escape this skills checkout through symlinks');
+  return existsSync(path) ? realpathSync(path) : path;
+}
+// Consumers share this checkout. The override isolates fixtures inside it;
+// it cannot relocate this project's state into Home or another checkout.
+export const installationDirectory = () => {
+  assert(!process.env.SKILLS_STATE_DIR || isAbsolute(process.env.SKILLS_STATE_DIR), 'SKILLS_STATE_DIR must be an absolute checkout-local path');
+  return localPath(resolve(process.env.SKILLS_STATE_DIR || library));
+};
 export const stateDirectory = () => {
-  assert(!process.env.SKILLS_STATE_DIR || isAbsolute(process.env.SKILLS_STATE_DIR), 'SKILLS_STATE_DIR must be an installation-wide absolute path');
-  return resolve(process.env.SKILLS_STATE_DIR || fileURLToPath(new URL('../../..', import.meta.url)));
+  const root = installationDirectory();
+  assert(!['consumer.json', 'credits.json', '.env', 'credits.json.lock'].some(f => existsSync(resolve(root, f))),
+    'Legacy root configuration found: move it intact into config/ with managed runs stopped; never initialize a replacement ledger');
+  return localPath(resolve(root, 'config'));
 };
 export function consumerConfiguration() {
-  const file = resolve(stateDirectory(), 'consumer.json');
+  const directory = stateDirectory(), file = resolve(directory, 'consumer.json'), credits = resolve(directory, 'credits.json');
   if (!existsSync(file)) return null;
   const info = lstatSync(file);
   assert(info.isFile() && !info.isSymbolicLink() && info.nlink === 1, 'Shared consumer configuration must be a local file');
@@ -23,7 +38,11 @@ export function consumerConfiguration() {
   assert(g.schema_version === 1 && g.enabled === true && g.catalog === 'global' && g.selection === 'qualified-free-then-go', 'Invalid shared routing configuration');
   assert(Number.isInteger(g.minimum_score) && g.minimum_score >= 1 && g.minimum_score <= 3 && typeof g.allow_provisional === 'boolean' && typeof g.auto_fallback === 'boolean', 'Invalid shared model qualification');
   assert(Number.isFinite(g.reserve_multiplier) && g.reserve_multiplier >= 1 && g.credits === 'credits.json' && g.refresh_codex === true, 'Shared provider pool and automatic account refresh are required');
-  return { ...g, directory: realpathSync(stateDirectory()), credits: resolve(realpathSync(stateDirectory()), 'credits.json') };
+  if (existsSync(credits)) {
+    const pool = lstatSync(credits);
+    assert(pool.isFile() && !pool.isSymbolicLink() && pool.nlink === 1, 'Shared provider state must be a local file');
+  }
+  return { ...g, directory: realpathSync(directory), credits: resolve(realpathSync(directory), 'credits.json') };
 }
 
 export function sharedPolicy(g, c, local = null, root = '.') {

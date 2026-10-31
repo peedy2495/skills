@@ -1,6 +1,6 @@
 # OpenCode quota/balance
 
-Use the shared status command in [usage](../SKILL.md); it resolves the installation-wide pool, including an explicit `SKILLS_STATE_DIR`.
+Use the shared status command in [usage](../SKILL.md); it resolves the shared checkout's `config/credits.json`.
 
 Returns observed Go rolling/weekly/monthly usage/reset windows; remaining percentage is `100 - percent`, not a wallet balance. Missing configuration/API failure remains unknown; no manual quota fallback. Execution refreshes both shared observations automatically. [Credits](../../opencode-executor/references/credits.md) owns documented conversions, token-price fallback and account setup; only its script may read `.env`, never the agent or shell-source. Token prices rank models when conversion is unavailable; they never establish remaining quota.
 

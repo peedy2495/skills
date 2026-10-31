@@ -2,10 +2,13 @@ artifacts/
 __pycache__/
 /.env
 /.env.*
-!/.env.example
 /credits.json
 /credits.json.lock/
 /consumer.json
+/config/*
+!/config/consumer.example.json
+!/config/credits.example.json
+!/config/.env.example
 /catalog.json
 /catalog.json.*
 /.quota-prompt.json
